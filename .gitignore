@@ -5,3 +5,5 @@
 *.creator.user.*
 *.files
 *.includes
+*.o
+*.idea
