@@ -1,4 +1,6 @@
 const std = @import("std");
+const stdout = std.fs.File.stdout();
+const print = std.debug.print;
 
 const Base64 = struct {
     table: *const [64]u8,
@@ -13,7 +15,7 @@ const Base64 = struct {
         return self.table[index];
     }
 
-    fn charIndex(self: Base64, char: u8) ?u8 {
+    fn charIndex(self: Base64, char: u8) u8 {
         if (char == '=')
             return 64; // Padding character
 
@@ -29,3 +31,15 @@ const Base64 = struct {
         return index;
     }
 };
+
+pub fn main() !void {
+    const base64 = Base64.init();
+
+    const char: u8 = 'T';
+    const index = base64.charIndex(char);
+    print("Character: {}, Index: {}\n", .{ char, index });
+
+    const idx: u8 = 19;
+    const character = base64.charAt(idx);
+    print("Index: {}, Character: {}\n", .{ idx, character });
+}
