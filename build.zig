@@ -17,6 +17,21 @@ fn baseName(name: []const u8) []const u8 {
     return it.peek().?;
 }
 
+fn deleteArtifacts() !void {
+    const dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
+    var it = dir.iterate();
+
+    while (try it.next()) |entry| {
+        if (entry.kind != .file)
+            continue;
+
+        if (std.mem.endsWith(u8, entry.name, ".a")) {
+            std.debug.print("Cleaning file: {s}\n", .{entry.name});
+            try dir.deleteFile(entry.name);
+        }
+    }
+}
+
 pub fn build(b: *std.Build) void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -40,4 +55,6 @@ pub fn build(b: *std.Build) void {
 
         b.installArtifact(lib);
     }
+
+    deleteArtifacts() catch std.debug.print("Failed to delete build artifacts", .{});
 }
