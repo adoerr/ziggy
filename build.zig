@@ -19,7 +19,7 @@ fn baseName(name: []const u8) []const u8 {
 
 pub fn build(b: *std.Build) void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator;
+    const allocator = gpa.allocator();
     _ = allocator;
 
     const paths = [_][]const u8{
@@ -27,12 +27,12 @@ pub fn build(b: *std.Build) void {
     };
 
     for (paths) |path| {
-        std.debug.print("Building Zig module {s}...\n", .{path});
+        std.debug.print("Building Zig module {s} ...\n", .{path});
         const file_name = fileName(path);
         const base_name = baseName(file_name);
         const lib = b.addLibrary(.{
             .name = base_name,
-            .root_module = b.crateModule(.{
+            .root_module = b.createModule(.{
                 .root_source_file = b.path(path),
                 .target = b.graph.host,
             }),
