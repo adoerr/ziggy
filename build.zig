@@ -1,4 +1,7 @@
 const std = @import("std");
+const Io = std.Io;
+var threaded: Io.Threaded = .init_single_threaded;
+const io = threaded.ioBasic();
 
 fn fileName(path: []const u8) []const u8 {
     var it = std.mem.tokenizeScalar(u8, path, '/');
@@ -18,16 +21,16 @@ fn baseName(name: []const u8) []const u8 {
 }
 
 fn deleteArtifacts() !void {
-    const dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
+    const dir = try std.Io.Dir.cwd().openDir(io, ".", .{ .iterate = true });
     var it = dir.iterate();
 
-    while (try it.next()) |entry| {
+    while (try it.next(io)) |entry| {
         if (entry.kind != .file)
             continue;
 
         if (std.mem.endsWith(u8, entry.name, ".a")) {
             std.debug.print("Cleaning file: {s}\n", .{entry.name});
-            try dir.deleteFile(entry.name);
+            try dir.deleteFile(io, entry.name);
         }
     }
 }
@@ -40,6 +43,7 @@ pub fn build(b: *std.Build) void {
     const paths = [_][]const u8{
         "base64/base64_basic.zig",
         "basics/hello-world.zig",
+        "basics/queue.zig",
     };
 
     for (paths) |path| {
