@@ -19,7 +19,7 @@ pub fn main() !void {
     defer assert(dbg_alloc.deinit() == .ok);
     const gpa = dbg_alloc.allocator();
 
-    var threaded: Io.Threaded = .init_single_threaded;
+    var threaded: Io.Threaded = .init(gpa, .{ .environ = .empty });
     defer threaded.deinit();
     const io = threaded.io();
 
