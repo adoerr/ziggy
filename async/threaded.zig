@@ -6,11 +6,15 @@ const assert = std.debug.assert;
 fn juicyMain(gpa: Allocator, io: Io) !void {
     _ = gpa;
 
-    doWork(io);
+    var a = io.async(doWork, .{ io, "hard" });
+    var b = io.async(doWork, .{ io, "on an excuse to drink Spezi" });
+
+    a.await(io);
+    b.await(io);
 }
 
-fn doWork(io: Io) void {
-    std.debug.print("working ...\n", .{});
+fn doWork(io: Io, text: []const u8) void {
+    std.debug.print("working {s}\n", .{text});
     io.sleep(.fromSeconds(1), .awake) catch {};
 }
 
