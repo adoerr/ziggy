@@ -4,16 +4,26 @@ const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
 fn juicyMain(gpa: Allocator, io: Io) !void {
-    _ = gpa;
+    var a = io.async(doWork, .{ gpa, io, "hard" });
+    defer a.cancel(io) catch {};
 
-    var a = io.async(doWork, .{ io, "hard" });
-    var b = io.async(doWork, .{ io, "on an excuse to drink Spezi" });
+    var b = io.async(doWork, .{ gpa, io, "on an excuse to drink Spezi" });
+    defer b.cancel(io) catch {};
 
-    a.await(io);
-    b.await(io);
+    try a.await(io);
+    try b.await(io);
 }
 
-fn doWork(io: Io, text: []const u8) void {
+fn doWork(gpa: Allocator, io: Io, text: []const u8) !void {
+    // simulate an error
+    if (text[0] == 'h') {
+        std.debug.print("error: {s} is too hard\n", .{text});
+        return error.OutOfMemory;
+    }
+
+    const copy = try gpa.dupe(u8, text);
+    defer gpa.free(copy);
+
     std.debug.print("working {s}\n", .{text});
     io.sleep(.fromSeconds(1), .awake) catch {};
 }
