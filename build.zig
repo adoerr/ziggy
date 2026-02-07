@@ -42,6 +42,7 @@ pub fn build(b: *std.Build) void {
 
     const paths = [_][]const u8{
         "async/example0.zig",
+        "async//threaded.zig",
         "base64/base64_basic.zig",
         "basics/hello-world.zig",
         "basics/queue.zig",
