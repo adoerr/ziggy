@@ -49,4 +49,5 @@ fabrica/**/build/
 # Ignored Zig build artifacts
 **/.zig-cache
 **/zig-out
+**/zig-pkg
 **/main
