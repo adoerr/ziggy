@@ -26,7 +26,7 @@ pub fn Queue(comptime Child: type) type {
             self.end = node;
         }
 
-        pub fn dequeue(self: *Self) ?Self {
+        pub fn dequeue(self: *Self) ?Child {
             const start = self.start orelse return null;
             defer self.gpa.destroy(start);
             if (start.next) |next|
@@ -38,4 +38,23 @@ pub fn Queue(comptime Child: type) type {
             return start.data;
         }
     };
+}
+
+test "queue" {
+    var q = Queue(i32).init(std.testing.allocator);
+
+    try q.enqueue(25);
+    try q.enqueue(50);
+    try q.enqueue(75);
+    try q.enqueue(100);
+
+    try std.testing.expectEqual(q.dequeue(), 25);
+    try std.testing.expectEqual(q.dequeue(), 50);
+    try std.testing.expectEqual(q.dequeue(), 75);
+    try std.testing.expectEqual(q.dequeue(), 100);
+    try std.testing.expectEqual(q.dequeue(), null);
+
+    try q.enqueue(5);
+    try std.testing.expectEqual(q.dequeue(), 5);
+    try std.testing.expectEqual(q.dequeue(), null);
 }
