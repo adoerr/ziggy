@@ -2,30 +2,27 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
+const debug = std.debug;
 
 fn juicyMain(gpa: Allocator, io: Io) !void {
     var a = io.async(doWork, .{ gpa, io, "hard" });
-    defer a.cancel(io) catch {};
+    defer if (a.cancel(io)) |s| gpa.free(s) else |_| {};
 
     var b = io.async(doWork, .{ gpa, io, "on an excuse to drink Spezi" });
-    defer b.cancel(io) catch {};
+    defer if (b.cancel(io)) |s| gpa.free(s) else |_| {};
 
-    try a.await(io);
-    try b.await(io);
+    const a_str = try a.await(io);
+    const b_str = try b.await(io);
+    debug.print("finished {s}\n", .{a_str});
+    debug.print("finished {s}\n", .{b_str});
 }
 
-fn doWork(gpa: Allocator, io: Io, text: []const u8) !void {
-    // simulate an error
-    if (text[0] == 'h') {
-        std.debug.print("error: {s} is too hard\n", .{text});
-        return error.OutOfMemory;
-    }
+fn doWork(gpa: Allocator, io: Io, text: []const u8) ![]u8 {
+    const string = try gpa.dupe(u8, text);
+    debug.print("working {s}\n", .{string});
 
-    const copy = try gpa.dupe(u8, text);
-    defer gpa.free(copy);
-
-    std.debug.print("working {s}\n", .{text});
     io.sleep(.fromSeconds(1), .awake) catch {};
+    return string;
 }
 
 pub fn main() !void {
