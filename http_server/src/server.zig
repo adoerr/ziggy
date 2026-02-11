@@ -20,7 +20,7 @@ pub const Server = struct {
     }
 
     pub fn listen(self: Server) !net.Server {
-        debug.print("Server Addr: {s}:{any}", .{ self.host, self.port });
+        debug.print("Server Addr: {s}:{any}\n", .{ self.host, self.port });
         return try self.addr.listen(self.io, .{ .mode = Socket.Mode.stream, .protocol = Protocol.tcp });
     }
 };
