@@ -3,7 +3,22 @@ const Io = std.Io;
 const mem = std.mem;
 const Stream = std.Io.net.Stream;
 
-pub fn readRequest() !void {}
+pub fn readRequest(io: Io, conn: Stream, buffer: []u8) !void {
+    var buf: [1024]u8 = undefined;
+    const reader = &conn.reader(io, &buf).interface;
+    var idx: usize = 0;
+
+    for (0..5) |_| {
+        const len = try nextLine(reader, buffer, idx);
+        idx += len;
+    }
+}
+
+fn nextLine(reader: *Io.Reader, buffer: []u8, start_idx: usize) !usize {
+    const next_line = try reader.takeDelimiterInclusive("\n");
+    @memcpy(buffer[start_idx..(start_idx + next_line.len)], next_line[0..]);
+    return next_line.len;
+}
 
 const Map = std.static_string_map.StaticStringMap;
 const MethodMap = Map(Method).initComptime(.{.{ "GET", Method.GET }});
