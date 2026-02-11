@@ -1,5 +1,8 @@
 const std = @import("std");
+const debug = std.debug;
 const net = std.Io.net;
+const Socket = std.Io.net.Socket;
+const Protocol = std.Io.net.Protocol;
 
 pub const Server = struct {
     host []const u8,
@@ -16,6 +19,8 @@ pub const Server = struct {
     }
 
     pub fn listen(self: Server) !net.Server {
-
+        debug.print("Server Addr: {s}:{any}", .{self.host, .self.port});
+        return try self.addr.listen(self.io, .{.mode = Socket.Mode.stream, .protocol = Protocol.tcp});
     }
 };
+
