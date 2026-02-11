@@ -1,5 +1,9 @@
 const std = @import("std");
+const Io = std.Io;
 const mem = std.mem;
+const Stream = std.Io.net.Stream;
+
+pub fn readRequest() !void {}
 
 const Map = std.static_string_map.StaticStringMap;
 const MethodMap = Map(Method).initComptime(.{.{ "GET", Method.GET }});
