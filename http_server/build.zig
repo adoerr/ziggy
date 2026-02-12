@@ -4,17 +4,19 @@ const std = @import("std");
 // declaratively construct a build graph that will be executed by an external
 // runner.
 pub fn build(b: *std.Build) void {
-    const exe = b.addExecutable(.{ .name = "http_server", .root_module = b.createModule(.{ .root_source_file = b.path("src/main.zig"), .target = b.graph.host }) });
+    const master = b.addExecutable(.{ .name = "http_server", .root_module = b.createModule(.{ .root_source_file = b.path("src/main.zig"), .target = b.graph.host }) });
+    const client = b.addExecutable(.{ .name = "http_client", .root_module = b.createModule(.{ .root_source_file = b.path("src/client.zig"), .target = b.graph.host }) });
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
-    b.installArtifact(exe);
+    b.installArtifact(master);
+    b.installArtifact(client);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.
-    const run_cmd = b.addRunArtifact(exe);
+    const run_cmd = b.addRunArtifact(master);
 
     // By making the run step depend on the install step, it will be run from the
     // installation directory rather than directly from within the cache directory.
