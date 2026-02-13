@@ -10,10 +10,13 @@ pub fn readRequest(io: Io, conn: Stream, buffer: []u8) !void {
     const reader_iface = &reader.interface;
     var idx: usize = 0;
 
-    for (0..5) |_| {
+    for (0..5) |i| {
         const len = try nextLine(reader_iface, buffer, idx);
-        log.debug("request line {s}", .{buffer});
         idx += len;
+
+        if (i >= 4) {
+            log.debug("request: {s}", .{buffer});
+        }
     }
 }
 

@@ -11,7 +11,7 @@ const Method = Request.Method;
 const Server = @import("server.zig").Server;
 
 pub const std_options = std.Options{
-    .log_level = .debug,
+    .log_level = .info,
 };
 
 pub fn main() !void {
@@ -32,13 +32,13 @@ pub fn main() !void {
     var writer = std.Io.File.stdout().writer(io, &buf);
     const stdout = &writer.interface;
 
-    log.debug("client connected {any}\n", .{client});
+    log.info("client connected {any}\n", .{client});
 
     var req_buf = [_]u8{0} ** 1000;
     try Request.readRequest(io, client, req_buf[0..]);
     const request = Request.parseRequest(req_buf[0..req_buf.len]);
 
-    log.debug("request {any}", .{request});
+    log.info("request {any}", .{request});
 
     req_buf[req_buf.len - 1] = '\n';
     _ = try stdout.writeAll(req_buf[0..]);
