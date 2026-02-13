@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 const mem = std.mem;
 const Stream = std.Io.net.Stream;
+const log = std.log.scoped(.request);
 
 pub fn readRequest(io: Io, conn: Stream, buffer: []u8) !void {
     var buf: [1024]u8 = undefined;
@@ -11,6 +12,7 @@ pub fn readRequest(io: Io, conn: Stream, buffer: []u8) !void {
 
     for (0..5) |_| {
         const len = try nextLine(reader_iface, buffer, idx);
+        log.debug("request line {s}", .{buffer});
         idx += len;
     }
 }

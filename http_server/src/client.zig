@@ -11,4 +11,5 @@ pub fn main(init: std.process.Init) !void {
     const addr = try net.IpAddress.parseIp4(host, port);
     const conn = try addr.connect(init.io, .{ .mode = net.Socket.Mode.stream, .protocol = net.Protocol.tcp });
     debug.print("Connection {any}\n", .{conn});
+    try conn.socket.send(init.io, &addr, "GET / HTTP/1.1\n");
 }
