@@ -1,15 +1,21 @@
 const std = @import("std");
 const Io = std.Io;
 const debug = std.debug;
-const net = std.Io.net;
+const log = std.log.scoped(.client);
+const http = std.http;
+const Uri = std.Uri;
+
+pub const std_options = std.Options{
+    .log_level = .debug,
+};
 
 pub fn main(init: std.process.Init) !void {
-    const host = "127.0.0.1";
-    const port: u16 = 3490;
+    var client = http.Client{ .io = init.io, .allocator = init.gpa };
+    defer client.deinit();
 
-    debug.print("Client connecting to {s}:{any}\n", .{ host, port });
-    const addr = try net.IpAddress.parseIp4(host, port);
-    const conn = try addr.connect(init.io, .{ .mode = net.Socket.Mode.stream, .protocol = net.Protocol.tcp });
-    debug.print("Connection {any}\n", .{conn});
-    try conn.socket.send(init.io, &addr, "GET / HTTP/1.1\n");
+    const uri = try Uri.parse("http://127.0.0.1:3490");
+
+    var req = try client.request(.GET, uri, .{});
+    req.deinit();
+    _ = try req.sendBodiless();
 }
