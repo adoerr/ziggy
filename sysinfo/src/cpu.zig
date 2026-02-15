@@ -1,6 +1,8 @@
 const std = @import("std");
 const mem = std.mem;
 const fmt = std.fmt;
+const Io = std.Io;
+const Allocator = mem.Allocator;
 
 pub const CPUError = error{
     InvalidFormat,
@@ -11,6 +13,12 @@ pub const Sample = struct {
     total: u64,
 };
 
+pub const Snapshot = struct {
+    total: Sample,
+    cores: []Sample,
+};
+
+/// Parse a single CPU line from `/proc/stat` and return a `Sample`
 pub inline fn parseLine(line: []const u8) CPUError!Sample {
     // remove everything up to the first numerical value
     _, const after = mem.cutScalar(u8, line, ' ') orelse return CPUError.InvalidFormat;
@@ -34,6 +42,11 @@ pub inline fn parseLine(line: []const u8) CPUError!Sample {
     const sum_bussy = fields[0] + fields[1] + fields[2] + fields[5] + fields[6] + fields[7];
 
     return .{ .idle = sum_idle, .total = sum_bussy };
+}
+
+/// Read a CPU usage counter snapshot for `proc/stat`
+pub fn readSnapshot(_: Io, _: Allocator) !Snapshot {
+    return .{};
 }
 
 const testing = std.testing;
