@@ -2,7 +2,9 @@ const std = @import("std");
 const mem = std.mem;
 const fmt = std.fmt;
 const Io = std.Io;
+const Dir = Io.Dir;
 const Allocator = mem.Allocator;
+const ArrayList = std.ArrayList;
 
 pub const CPUError = error{
     InvalidFormat,
@@ -44,9 +46,53 @@ pub inline fn parseLine(line: []const u8) CPUError!Sample {
     return .{ .idle = sum_idle, .total = sum_bussy };
 }
 
+// `/proc/stat` is usually small
+const STAT_BUFFER_SIZE: usize = 16 * 1024;
+
+// max expected cores
+const MAX_CORES: usize = 256;
+
 /// Read a CPU usage counter snapshot for `proc/stat`
-pub fn readSnapshot(_: Io, _: Allocator) !Snapshot {
-    return .{};
+pub fn readSnapshot(io: Io, alloc: Allocator) !Snapshot {
+    var file = try Dir.openFileAbsolute(io, "/proc/stat", .{});
+    defer file.close(io);
+
+    var buf: [STAT_BUFFER_SIZE]u8 = undefined;
+    var reader = file.reader(io, .{});
+    const nbytes = try reader.interface.readSliceShort(&buf);
+
+    // pre-alloc a list of cores
+    var cores: ArrayList(Sample) = .empty;
+    try cores.ensureTotalCapacity(alloc, MAX_CORES);
+    errdefer cores.deinit(alloc);
+
+    var total: Sample = undefined;
+    // do we have a total (`cpu`) line
+    var has_total = false;
+
+    // parse total (`cpu`) and idividual core (`cpux`) lines in one go
+    var lines = mem.splitScalar(u8, buf[0..nbytes], '\n');
+    while (lines.next()) |raw| {
+        if (raw.len < 4) continue;
+
+        // we are only care about cpu counters
+        if (raw[0] != 'c' or raw[1] != 'p' or raw[2] != 'u') break;
+
+        if (raw[3] == ' ') {
+            total = try parseLine(raw);
+            has_total = true;
+        } else {
+            // per core line (`cpu0`, `cpu1`, etc)
+            cores.appendAssumeCapacity(try parseLine(raw));
+        }
+    }
+
+    if (!has_total) return CPUError.InvalidFormat;
+
+    return .{
+        .total = total,
+        .cores = cores.toOwnedSlice(alloc) catch cores.items,
+    };
 }
 
 const testing = std.testing;
