@@ -58,7 +58,7 @@ pub fn readSnapshot(io: Io, alloc: Allocator) !Snapshot {
     defer file.close(io);
 
     var buf: [STAT_BUFFER_SIZE]u8 = undefined;
-    var reader = file.reader(io, .{});
+    var reader = file.reader(io, &buf);
     const nbytes = try reader.interface.readSliceShort(&buf);
 
     // pre-alloc a list of cores
@@ -96,6 +96,7 @@ pub fn readSnapshot(io: Io, alloc: Allocator) !Snapshot {
 }
 
 const testing = std.testing;
+const Threaded = std.Io.Threaded;
 
 test "parseLine" {
     // valid cpu line
@@ -117,4 +118,16 @@ test "parseLine" {
     // bad format (non numerical)
     const line4 = "cpu9 3555 13 3030 alpha 284 0 6 0 0 0";
     try testing.expectError(CPUError.InvalidFormat, parseLine(line4));
+}
+
+test "readSnapshot smoke test" {
+    const alloc = testing.allocator;
+    var threaded: Threaded = .init_single_threaded;
+    const io = threaded.io();
+
+    const snapshot = try readSnapshot(io, alloc);
+    defer alloc.free(snapshot.cores);
+
+    try testing.expect(snapshot.total.total > 0);
+    try testing.expect(snapshot.total.idle > 0);
 }
