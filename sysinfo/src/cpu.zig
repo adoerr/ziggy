@@ -95,6 +95,21 @@ pub fn readSnapshot(io: Io, alloc: Allocator) !Snapshot {
     };
 }
 
+pub inline fn computeUsage(a: Sample, b: Sample) f64 {
+    // handle counter wrap-around or CPU hotpluging
+    if (b.total <= a.total or b.idle <= a.idle) return 0.0;
+
+    const total = b.total - a.total;
+    const idle = b.idle - a.idle;
+
+    if (idle > total) return 0.0;
+
+    const total_f: f64 = @floatFromInt(total);
+    const idle_f: f64 = @floatFromInt(idle);
+
+    return (total_f - idle_f) / total_f * 100.0;
+}
+
 const testing = std.testing;
 const Threaded = std.Io.Threaded;
 
