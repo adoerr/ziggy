@@ -205,3 +205,31 @@ test "computeUsage" {
     const s_idle_dec = Sample{ .idle = 30, .total = 150 }; // total up, idle down
     try testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle_dec), 0.001);
 }
+
+test "calculateFrequency" {
+    // 800 MHz -> 800 MHz
+    const f1 = calculateFrequency(800.0);
+    try testing.expectEqualStrings("MHz", f1.unit);
+    try testing.expectApproxEqAbs(@as(f64, 800.0), f1.raw, 0.001);
+    try testing.expectEqual(@as(i64, 800), f1.rounded);
+    try testing.expectEqual(false, f1.fraction);
+
+    // 2500 MHz -> 2.5 GHz
+    const f2 = calculateFrequency(2500.0);
+    try testing.expectEqualStrings("GHz", f2.unit);
+    try testing.expectApproxEqAbs(@as(f64, 2.5), f2.raw, 0.001);
+    try testing.expectEqual(@as(i64, 3), f2.rounded); // rounds to nearest integer
+    try testing.expectEqual(true, f2.fraction); // 2.5 != 3.0
+
+    // 3000 MHz -> 3 GHz
+    const f3 = calculateFrequency(3000.0);
+    try testing.expectEqualStrings("GHz", f3.unit);
+    try testing.expectApproxEqAbs(@as(f64, 3.0), f3.raw, 0.001);
+    try testing.expectEqual(@as(i64, 3), f3.rounded);
+    try testing.expectEqual(false, f3.fraction);
+
+    // 800.0000001 MHz -> 800 MHz (noise suppression check)
+    const f4 = calculateFrequency(800.0000001);
+    try testing.expectEqualStrings("MHz", f4.unit);
+    try testing.expectEqual(false, f4.fraction); // Should match 800.0 within epsilon
+}
