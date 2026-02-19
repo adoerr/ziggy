@@ -20,6 +20,14 @@ pub const Snapshot = struct {
     cores: []Sample,
 };
 
+/// CPU frequency
+pub const Frequency = struct {
+    raw: f64 = 0.0,
+    rounded: i64 = 0,
+    fraction: bool = false,
+    unit: []const u8 = "MHz",
+};
+
 /// Parse a single CPU line from `/proc/stat` and return a `Sample`
 pub inline fn parseLine(line: []const u8) CPUError!Sample {
     // remove everything up to the first numerical value
@@ -95,6 +103,10 @@ pub fn readSnapshot(io: Io, alloc: Allocator) !Snapshot {
     };
 }
 
+/// Computes the CPU usage percentage between two samples.
+///
+/// Returns the usage percentage as a float between 0.0 and 100.0.
+/// Returns 0.0 if the counters have wrapped around or if the interval is invalid.
 pub inline fn computeUsage(a: Sample, b: Sample) f64 {
     // handle counter wrap-around or CPU hotpluging
     if (b.total <= a.total or b.idle <= a.idle) return 0.0;
@@ -108,6 +120,21 @@ pub inline fn computeUsage(a: Sample, b: Sample) f64 {
     const idle_f: f64 = @floatFromInt(idle);
 
     return (total_f - idle_f) / total_f * 100.0;
+}
+
+/// Calculate CPU frequency
+pub inline fn calculateFrequency(mhz: f64) Frequency {
+    const is_ghz = mhz >= 1000.0;
+    const value = if (is_ghz) mhz * 0.001 else mhz;
+    const value_rounded: i64 = @intFromFloat(@round(value));
+    const rounded_f: f64 = @floatFromInt(value_rounded);
+
+    return .{
+        .raw = value,
+        .rounded = value_rounded,
+        .fraction = @abs(value - rounded_f) > 0.001,
+        .unit = if (is_ghz) "GHz" else "MHz",
+    };
 }
 
 const testing = std.testing;
