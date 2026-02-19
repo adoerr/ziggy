@@ -146,3 +146,35 @@ test "readSnapshot smoke test" {
     try testing.expect(snapshot.total.total > 0);
     try testing.expect(snapshot.total.idle > 0);
 }
+
+test "computeUsage" {
+    const s0 = Sample{ .idle = 0, .total = 0 };
+    const s1 = Sample{ .idle = 50, .total = 100 };
+    const s2 = Sample{ .idle = 100, .total = 200 };
+    const s3 = Sample{ .idle = 50, .total = 100 }; // Same as s1 (no time passing)
+
+    // 0 -> 1: total delta 100, idle delta 50. Usage = (100-50)/100 = 50%
+    try testing.expectApproxEqAbs(@as(f64, 50.0), computeUsage(s0, s1), 0.001);
+
+    // 1 -> 2: total delta 100, idle delta 50. Usage = 50%
+    try testing.expectApproxEqAbs(@as(f64, 50.0), computeUsage(s1, s2), 0.001);
+
+    // No time passed (total == 0)
+    try testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s3), 0.001);
+
+    // 100% usage: total increases, idle stays same
+    const s_busy = Sample{ .idle = 50, .total = 200 }; // +100 total, +0 idle
+    try testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_busy), 0.001);
+
+    // 0% usage: total increases, idle increases same amount
+    const s_idle = Sample{ .idle = 150, .total = 200 }; // +100 total, +100 idle
+    try testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle), 0.001);
+
+    // Counter wrap-around: b.total < a.total (CPU hotplug or counter reset)
+    const s_wrap = Sample{ .idle = 10, .total = 50 }; // Lower than s1
+    try testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_wrap), 0.001);
+
+    // Idle counter decreases: b.idle < a.idle
+    const s_idle_dec = Sample{ .idle = 30, .total = 150 }; // total up, idle down
+    try testing.expectApproxEqAbs(@as(f64, 0.0), computeUsage(s1, s_idle_dec), 0.001);
+}
