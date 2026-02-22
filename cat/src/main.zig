@@ -1,9 +1,8 @@
 const std = @import("std");
+const Init = std.process.Init;
 const Io = std.Io;
 
-pub fn main(init: std.process.Init) !void {
-    const path = "./assets/meow.txt";
-
+pub fn main(init: Init) !void {
     var out_buf: [1024]u8 = undefined;
     var out_writer = Io.File.stdout().writer(init.io, &out_buf);
     var stdout = &out_writer.interface;
@@ -14,16 +13,22 @@ pub fn main(init: std.process.Init) !void {
 
     const cwd = std.Io.Dir.cwd();
 
-    const file = cwd.openFile(init.io, path, .{}) catch |err| {
-        try stderr.print("failed to open: {s}\n", .{path});
-        return err;
-    };
-    defer file.close(init.io);
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
-    var file_buf: [1014]u8 = undefined;
-    var file_reader = file.reader(init.io, &file_buf);
-    var reader = &file_reader.interface;
+    for (args[1..]) |path| {
+        const file = cwd.openFile(init.io, path, .{}) catch {
+            stderr.print("failed to open: {s}\n", .{path}) catch {};
+            try stderr.flush();
+            continue;
+        };
+        defer file.close(init.io);
 
-    _ = try reader.streamRemaining(stdout);
+        var file_buf: [1014]u8 = undefined;
+        var file_reader = file.reader(init.io, &file_buf);
+        var reader = &file_reader.interface;
+
+        _ = try reader.streamRemaining(stdout);
+    }
+
     try stdout.flush();
 }
