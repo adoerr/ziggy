@@ -1,9 +1,10 @@
 const std = @import("std");
+const options = @import("options");
 const Init = std.process.Init;
 const Io = std.Io;
 
 pub fn main(init: Init) !void {
-    var out_buf: [1024]u8 = undefined;
+    var out_buf: [options.write_buf_sz]u8 = undefined;
     var out_writer = Io.File.stdout().writer(init.io, &out_buf);
     var stdout = &out_writer.interface;
 
@@ -23,7 +24,7 @@ pub fn main(init: Init) !void {
         };
         defer file.close(init.io);
 
-        var file_buf: [1014]u8 = undefined;
+        var file_buf: [options.read_buf_sz]u8 = undefined;
         var file_reader = file.reader(init.io, &file_buf);
         var reader = &file_reader.interface;
 
