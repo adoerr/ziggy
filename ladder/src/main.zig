@@ -2,12 +2,11 @@ const std = @import("std");
 const ladder = @import("ladder");
 const Io = std.Io;
 
-pub fn main(init: std.process.Init) !void {
-    const cwd = Io.Dir.cwd();
-    const args = try init.minimal.args.toSlice(init.arena.allocator());
-    const words = try cwd.readFileAlloc(init.io, args[1], init.gpa, .unlimited);
-    defer init.gpa.free(words);
+pub fn main() !void {
+    const words = blk: {
+        @setEvalBranchQuota(1_000_000);
+        break :blk ladder.parseList(@embedFile("words.txt"));
+    };
 
-    const count = ladder.countWords(words);
-    std.debug.print("word count: {}\n", .{count});
+    std.debug.print("word list length: {}\n", .{words.len});
 }

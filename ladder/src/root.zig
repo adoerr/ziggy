@@ -13,13 +13,15 @@ pub fn countWords(text: []const u8) usize {
 
 /// Parse `list` into an array of 4-letter words
 pub fn parseList(comptime list: []const u8) [countWords(list)][4]u8 {
-    var word_list: [countWords(list)][4]u8 = undefined;
-    var idx: usize = 0;
-    var iter = mem.tokenizeScalar(u8, word_list, '\n');
+    return comptime blk: {
+        var word_list: [countWords(list)][4]u8 = undefined;
+        var idx: usize = 0;
+        var iter = mem.tokenizeScalar(u8, list, '\n');
 
-    while (iter.next()) |word| : (idx += 1) {
-        word_list[idx] = @as(*const [word.len]u8, @ptrCast(word.ptr)).*;
-    }
-
-    return word_list;
+        while (iter.next()) |word| : (idx += 1) {
+            if (word.len != 4) @compileError("All words must be 4 letters");
+            word_list[idx] = word[0..4].*;
+        }
+        break :blk word_list;
+    };
 }
