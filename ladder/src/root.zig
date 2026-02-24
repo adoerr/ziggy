@@ -26,8 +26,44 @@ pub fn parseList(comptime list: []const u8) [countWords(list)][4]u8 {
     };
 }
 
+const words = blk: {
+    @setEvalBranchQuota(1_000_000);
+    break :blk parseList(@embedFile("words.txt"));
+};
+
 const InvalidWordError = error{
     BadLength,
     NotInWordList,
     NotWordLadder,
 };
+
+pub fn validateWord(input: []const u8, last_word: [4]u8) ![4]u8 {
+    if (input.len != 4) {
+        return error.BadLength;
+    }
+
+    const candidate = @as(*const [4]u8, @ptrCast(input.ptr));
+
+    // check that the candidate word is in word list
+    for (words) |word| {
+        if (std.mem.eql(u8, &word, candidate)) {
+            break;
+        }
+    } else {
+        return error.NotInWordList;
+    }
+
+    var delta: u32 = 0;
+
+    for (candidate, last_word) |char_a, char_b| {
+        if (char_a != char_b) {
+            delta += 1;
+        }
+    }
+
+    if (delta != 1) {
+        return error.NotWordLadder;
+    }
+
+    return candidate.*;
+}
