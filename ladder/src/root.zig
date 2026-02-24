@@ -25,3 +25,9 @@ pub fn parseList(comptime list: []const u8) [countWords(list)][4]u8 {
         break :blk word_list;
     };
 }
+
+const InvalidWordError = error{
+    BadLength,
+    NotInWordList,
+    NotWordLadder,
+};
