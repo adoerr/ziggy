@@ -1,1 +1,1 @@
-pub const Lexer = @import("Lexer");
+pub const Lexer = @import("Lexer.zig");
