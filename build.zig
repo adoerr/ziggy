@@ -63,12 +63,19 @@ pub fn build(b: *std.Build) void {
         b.installArtifact(lib);
     }
 
+    // build the HTTP Server
     const http_server = b.addSystemCommand(&.{ "zig", "build" });
     http_server.cwd = b.path("http_server");
-
     const build_http_step = b.step("http_server", "Build the HTTP server");
     build_http_step.dependOn(&http_server.step);
     b.getInstallStep().dependOn(&http_server.step);
+
+    // build the `cat` programm
+    const cat = b.addSystemCommand(&.{ "zig", "build" });
+    cat.cwd = b.path("cat");
+    const build_cat_step = b.step("cat", "Build the `cat` programm");
+    build_cat_step.dependOn(&cat.step);
+    b.getInstallStep().dependOn(&cat.step);
 
     deleteArtifacts() catch std.debug.print("Failed to delete build artifacts", .{});
 }
