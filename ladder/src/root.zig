@@ -26,7 +26,7 @@ pub fn parseList(comptime list: []const u8) [countWords(list)][4]u8 {
     };
 }
 
-const words = blk: {
+pub const words = blk: {
     @setEvalBranchQuota(1_000_000);
     break :blk parseList(@embedFile("words.txt"));
 };
