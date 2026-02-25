@@ -77,5 +77,12 @@ pub fn build(b: *std.Build) void {
     build_cat_step.dependOn(&cat.step);
     b.getInstallStep().dependOn(&cat.step);
 
+    // build the `ladder` programm
+    const ladder = b.addSystemCommand(&.{ "zig", "build" });
+    ladder.cwd = b.path("ladder");
+    const build_ladder_step = b.step("ladder", "Build the `ladder` programm");
+    build_ladder_step.dependOn(&ladder.step);
+    b.getInstallStep().dependOn(&ladder.step);
+
     deleteArtifacts() catch std.debug.print("Failed to delete build artifacts", .{});
 }
