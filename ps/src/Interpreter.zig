@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
+const fmt = std.fmt;
 
 /// Object model - in PorstScript everything is an object.
 const ValueType = enum { integer, float, name, executable };
@@ -45,7 +46,38 @@ const Stack = struct {
     }
 };
 
-pub const Interpreter = struct {};
+pub const Interpreter = struct {
+    stack: Stack,
+
+    pub fn init(alloc: Allocator) Interpreter {
+        return .{ .stack = Stack.init(alloc) };
+    }
+
+    pub fn deinit(self: *Interpreter) void {
+        self.stack.deinit();
+    }
+
+    /// Evaluate a single token
+    pub fn evaluate(self: *Interpreter, token: []const u8) !void {
+        // literal name (starts with '/')
+        if (token.len > 1 and token[0] == '/') {
+            try self.stack.push(.{ .name = token[1..] });
+            return;
+        }
+
+        // try parsing as an Integer
+        if (fmt.parseInt(i64, token, 10)) |i| {
+            try self.stack.push(.{ .integer = i });
+            return;
+        } else |_| {}
+
+        // try parsing a Float
+        if (fmt.parseFloat(f64, token, 10)) |f| {
+            try self.stack.push(.{ .float = f });
+            return;
+        } else |_| {}
+    }
+};
 
 const testing = std.testing;
 const Writer = std.Io.Writer;
