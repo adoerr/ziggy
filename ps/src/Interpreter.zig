@@ -1,4 +1,6 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 
 /// Object model - in PorstScript everything is an object.
 const ValueType = enum { integer, float, name, executable };
@@ -20,13 +22,33 @@ const Value = union(ValueType) {
     }
 };
 
+/// PostScript operand stack
+const Stack = struct {
+    items: ArrayList(Value),
+    alloc: Allocator,
+
+    pub fn init(alloc: Allocator) Stack {
+        return .{ .alloc = alloc };
+    }
+
+    pub fn push(self: *Stack, val: Value) !void {
+        try self.items.append(.alloc, val);
+    }
+
+    pub fn pop(self: *Stack) !Value {
+        if (self.items.items.len == 0) return error.StackUnderflow;
+        return self.items.pop();
+    }
+};
+
 pub const Interpreter = struct {};
 
 const testing = std.testing;
+const Writer = std.Io.Writer;
 
 test "Value print" {
     const alloc = testing.allocator;
-    var writer = std.Io.Writer.Allocating.init(alloc);
+    var writer = Writer.Allocating.init(alloc);
     defer writer.deinit();
 
     // print integer
