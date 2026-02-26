@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayList;
+const ArrayList = std.ArrayListUnmanaged;
 
 /// Object model - in PorstScript everything is an object.
 const ValueType = enum { integer, float, name, executable };
@@ -28,16 +28,20 @@ const Stack = struct {
     alloc: Allocator,
 
     pub fn init(alloc: Allocator) Stack {
-        return .{ .alloc = alloc };
+        return .{ .items = .{}, .alloc = alloc };
+    }
+
+    pub fn deinit(self: *Stack) void {
+        self.items.deinit(self.alloc);
     }
 
     pub fn push(self: *Stack, val: Value) !void {
-        try self.items.append(.alloc, val);
+        try self.items.append(self.alloc, val);
     }
 
     pub fn pop(self: *Stack) !Value {
         if (self.items.items.len == 0) return error.StackUnderflow;
-        return self.items.pop();
+        return self.items.pop().?;
     }
 };
 
@@ -82,4 +86,28 @@ test "Value print" {
     var exec_list = writer.toArrayList();
     try testing.expectEqualStrings("add", exec_list.items);
     exec_list.deinit(alloc);
+}
+
+test "Stack push and pop" {
+    const alloc = testing.allocator;
+    var stack = Stack.init(alloc);
+    defer stack.deinit();
+
+    try stack.push(Value{ .integer = 10 });
+    try stack.push(Value{ .integer = 20 });
+
+    const val2 = try stack.pop();
+    try testing.expectEqual(val2.integer, 20);
+
+    const val1 = try stack.pop();
+    try testing.expectEqual(val1.integer, 10);
+
+    try testing.expectError(error.StackUnderflow, stack.pop());
+
+    try stack.push(Value{ .name = "foo" });
+
+    const val3 = try stack.pop();
+    try testing.expectEqual(val3.name, "foo");
+
+    try testing.expectError(error.StackUnderflow, stack.pop());
 }
