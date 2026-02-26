@@ -40,3 +40,35 @@ pub const Lexer = struct {
         return null;
     }
 };
+
+test "Lexer.next" {
+    const testing = std.testing;
+
+    const code =
+        \\ % This is a comment
+        \\ 10 20 add       % 10 + 20 = 30
+        \\ 5.5 mul         % 30 * 5.5 = 165.0
+        \\ /my_variable    % push a literal name
+        \\ 100 20 div      % 100 / 20 = 5
+        \\ pstack          % Should print: 5 \n /my_variable \n 165
+    ;
+
+    var lexer = Lexer.init(code);
+
+    try testing.expectEqualStrings("10", lexer.next().?);
+    try testing.expectEqualStrings("20", lexer.next().?);
+    try testing.expectEqualStrings("add", lexer.next().?);
+
+    try testing.expectEqualStrings("5.5", lexer.next().?);
+    try testing.expectEqualStrings("mul", lexer.next().?);
+
+    try testing.expectEqualStrings("/my_variable", lexer.next().?);
+
+    try testing.expectEqualStrings("100", lexer.next().?);
+    try testing.expectEqualStrings("20", lexer.next().?);
+    try testing.expectEqualStrings("div", lexer.next().?);
+
+    try testing.expectEqualStrings("pstack", lexer.next().?);
+
+    try testing.expect(lexer.next() == null);
+}
