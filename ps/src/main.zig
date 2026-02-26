@@ -1,7 +1,7 @@
 const std = @import("std");
-const Io = std.Io;
-
 const ps = @import("ps");
+const Io = std.Io;
+const log = std.log.scoped(.main);
 
 pub fn main(_: std.process.Init) !void {
     // sample PostScript snippet to test our Lexer and RPN logic
@@ -14,5 +14,9 @@ pub fn main(_: std.process.Init) !void {
         \\ pstack          % Should print: 5 \n /my_variable \n 165
     ;
 
-    _ = ps.Lexer.init(code);
+    var lexer = ps.Lexer.init(code);
+
+    while (lexer.next()) |token| {
+        log.debug("token: {s}\n", .{token});
+    }
 }
