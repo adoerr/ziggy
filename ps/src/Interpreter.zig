@@ -1,7 +1,10 @@
 const std = @import("std");
+const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const fmt = std.fmt;
+const mem = std.mem;
+const debug = std.debug;
 
 /// Object model - in PorstScript everything is an object.
 const ValueType = enum { integer, float, name, executable };
@@ -48,9 +51,10 @@ const Stack = struct {
 
 pub const Interpreter = struct {
     stack: Stack,
+    io: Io = undefined,
 
-    pub fn init(alloc: Allocator) Interpreter {
-        return .{ .stack = Stack.init(alloc) };
+    pub fn init(io: Io, alloc: Allocator) Interpreter {
+        return .{ .io = io, .stack = Stack.init(alloc) };
     }
 
     pub fn deinit(self: *Interpreter) void {
@@ -76,6 +80,42 @@ pub const Interpreter = struct {
             try self.stack.push(.{ .float = f });
             return;
         } else |_| {}
+
+        // must be an executable name, either operator or variable
+        try self.executeOperator(token);
+    }
+
+    fn executeOperator(self: *Interpreter, op: []const u8) !void {
+        if (mem.eql(u8, op, "pstack")) {
+            try self.opPstack();
+        } else {
+            // TODO: lookup operator in dictionary stack
+            debug.print("Error: Unknown operator `{s}`", .{op});
+            return error.UnknownOperator;
+        }
+    }
+
+    const MathOp = enum { Add, Sub, Mul, Div };
+
+    /// Match operators
+    fn opMath(_: *Interpreter, _: MathOp) !void {
+        unreachable;
+    }
+
+    /// Print stack non-destructively (`pstack`)
+    fn opPstack(self: *Interpreter) !void {
+        var out_buf: [1024]u8 = undefined;
+        var out_writer = Io.File.stdout().writer(self.io, &out_buf);
+        const stdout = &out_writer.interface;
+        var i: usize = self.stack.items.items.len;
+
+        while (i > 0) {
+            i -= 1;
+            const val = self.stack.items.items[i];
+            try val.print(stdout);
+            try stdout.print("\n", .{});
+            try stdout.flush();
+        }
     }
 };
 
