@@ -76,7 +76,7 @@ pub const Interpreter = struct {
         } else |_| {}
 
         // try parsing a Float
-        if (fmt.parseFloat(f64, token, 10)) |f| {
+        if (fmt.parseFloat(f64, token)) |f| {
             try self.stack.push(.{ .float = f });
             return;
         } else |_| {}
@@ -86,7 +86,15 @@ pub const Interpreter = struct {
     }
 
     fn executeOperator(self: *Interpreter, op: []const u8) !void {
-        if (mem.eql(u8, op, "pstack")) {
+        if (mem.eql(u8, op, "add")) {
+            try self.opMath(MathOp.Add);
+        } else if (mem.eql(u8, op, "sub")) {
+            try self.opMath(MathOp.Sub);
+        } else if (mem.eql(u8, op, "mul")) {
+            try self.opMath(MathOp.Mul);
+        } else if (mem.eql(u8, op, "div")) {
+            try self.opMath(MathOp.Div);
+        } else if (mem.eql(u8, op, "pstack")) {
             try self.opPstack();
         } else {
             // TODO: lookup operator in dictionary stack
@@ -211,4 +219,71 @@ test "Stack push and pop" {
     try testing.expectEqual(val3.name, "foo");
 
     try testing.expectError(error.StackUnderflow, stack.pop());
+}
+
+test "Interpreter arithmetic" {
+    const alloc = testing.allocator;
+    // Pass undefined for IO since we only test arithmetic
+    var interp = Interpreter.init(undefined, alloc);
+    defer interp.deinit();
+
+    // Test addition
+    try interp.evaluate("10");
+    try interp.evaluate("20");
+    try interp.evaluate("add");
+
+    var result = try interp.stack.pop();
+    try testing.expectEqual(result.integer, 30);
+
+    // Push 30 back (was popped)
+    try interp.stack.push(.{ .integer = 30 });
+
+    // Test multiplication
+    try interp.evaluate("5.5");
+    try interp.evaluate("mul"); // 30 * 5.5 = 165.0
+    result = try interp.stack.pop();
+    try testing.expectApproxEqAbs(result.float, 165.0, 0.0001);
+
+    // Test division
+    // Push 100, 20 (evaluate "add" was last, stack empty)
+    try interp.evaluate("100");
+    try interp.evaluate("20");
+    try interp.evaluate("div"); // 100 / 20 = 5 (integer division as implemented)
+    result = try interp.stack.pop();
+    try testing.expectEqual(result.integer, 5);
+
+    // Test float division
+    try interp.evaluate("10.0");
+    try interp.evaluate("2.0");
+    try interp.evaluate("div"); // 5.0
+    result = try interp.stack.pop();
+    try testing.expectEqual(result.float, 5.0);
+
+    // Test subtraction
+    try interp.evaluate("10");
+    try interp.evaluate("3");
+    try interp.evaluate("sub"); // 7
+    result = try interp.stack.pop();
+    try testing.expectEqual(result.integer, 7);
+}
+
+test "Interpreter error handling" {
+    const alloc = testing.allocator;
+    var interp = Interpreter.init(undefined, alloc);
+    defer interp.deinit();
+
+    // Stack underflow
+    try testing.expectError(error.StackUnderflow, interp.evaluate("add"));
+
+    // Unknown operator
+    try testing.expectError(error.UnknownOperator, interp.evaluate("unknown_op"));
+}
+
+test "Interpreter pstack" {
+    const alloc = testing.allocator;
+    var interp = Interpreter.init(testing.io, alloc);
+    defer interp.deinit();
+
+    try interp.evaluate("10");
+    try interp.evaluate("pstack");
 }
