@@ -84,5 +84,19 @@ pub fn build(b: *std.Build) void {
     build_ladder_step.dependOn(&ladder.step);
     b.getInstallStep().dependOn(&ladder.step);
 
+    // build the 'sysinfo' programm
+    const sysinfo = b.addSystemCommand(&.{ "zig", "build" });
+    sysinfo.cwd = b.path("sysinfo");
+    const build_sysinfo_step = b.step("sysinfo", "Build the `sysinfo` programm");
+    build_sysinfo_step.dependOn(&sysinfo.step);
+    b.getInstallStep().dependOn(&sysinfo.step);
+
+    // build the `ps` programm
+    const ps = b.addSystemCommand(&.{ "zig", "build" });
+    ps.cwd = b.path("ps");
+    const build_ps_step = b.step("ps", "Build the PostScript interpreter");
+    build_ps_step.dependOn(&ps.step);
+    b.getInstallStep().dependOn(&ps.step);
+
     deleteArtifacts() catch std.debug.print("Failed to delete build artifacts", .{});
 }
