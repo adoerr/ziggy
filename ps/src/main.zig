@@ -3,7 +3,7 @@ const ps = @import("ps");
 const Io = std.Io;
 const log = std.log.scoped(.main);
 
-pub fn main(_: std.process.Init) !void {
+pub fn main(init: std.process.Init) !void {
     // sample PostScript snippet to test our Lexer and RPN logic
     const code =
         \\ % This is a comment
@@ -16,7 +16,14 @@ pub fn main(_: std.process.Init) !void {
 
     var lexer = ps.Lexer.init(code);
 
+    var interpreter = ps.Interpreter.init(init.io, init.gpa);
+    defer interpreter.deinit();
+
+    log.info("Start evaluate PostScript code", .{});
+
     while (lexer.next()) |token| {
-        log.debug("token: {s}\n", .{token});
+        try interpreter.evaluate(token);
     }
+
+    log.info("Evaluation done\n", .{});
 }
