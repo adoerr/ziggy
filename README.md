@@ -3,7 +3,7 @@
 <br>
 
 <p align="center">
-    <img src="./tool.png" widht="500" height="300">
+    <img src="./zig-logo.png" widht="320" height="320">
 </p>
 
 ## Motivation
