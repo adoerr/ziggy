@@ -98,8 +98,37 @@ pub const Interpreter = struct {
     const MathOp = enum { Add, Sub, Mul, Div };
 
     /// Match operators
-    fn opMath(_: *Interpreter, _: MathOp) !void {
-        unreachable;
+    fn opMath(self: *Interpreter, op: MathOp) !void {
+        const b = try self.stack.pop();
+        const a = try self.stack.pop();
+
+        if (a == .integer and b == .integer) {
+            const result = switch (op) {
+                .Add => a.integer + b.integer,
+                .Sub => a.integer - b.integer,
+                .Mul => a.integer * b.integer,
+                .Div => @divTrunc(a.integer, b.integer), // PostScript uses integer division if both operands are ints
+            };
+            try self.stack.push(.{ .integer = result });
+        } else {
+            const a_float = switch (a) {
+                .integer => |i| @as(f64, @floatFromInt(i)),
+                .float => |f| f,
+                else => return error.TypeCheck,
+            };
+            const b_float = switch (b) {
+                .integer => |i| @as(f64, @floatFromInt(i)),
+                .float => |f| f,
+                else => return error.TypeCheck,
+            };
+            const result = switch (op) {
+                .Add => a_float + b_float,
+                .Sub => a_float - b_float,
+                .Mul => a_float * b_float,
+                .Div => a_float / b_float,
+            };
+            try self.stack.push(.{ .float = result });
+        }
     }
 
     /// Print stack non-destructively (`pstack`)
