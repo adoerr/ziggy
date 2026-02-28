@@ -2,7 +2,10 @@ const std = @import("std");
 const ascii = std.ascii;
 const testing = std.testing;
 
-const HostName = @This();
+pub const HostName = @This();
+
+// validated, hostname bytes as a static, comptime initialized variable
+bytes: []const u8,
 
 /// Max supported host name length
 pub const MAX_LEN = 255;
@@ -84,4 +87,14 @@ test validate {
     try testing.expectError(error.InvalidHostName, validate(".."));
     try testing.expectError(error.InvalidHostName, validate("a" ** 64 ++ ".com")); // label length 64 (too loang)
     try testing.expectError(error.NameTooLong, validate("a." ** 127 ++ "ab")); // total length 256 (too long)
+}
+
+pub fn init(bytes: []const u8) ValidateError!HostName {
+    try validate(bytes);
+    return .{ .bytes = bytes };
+}
+
+/// Domain names are case-insensitive (RFC 5890, Section 2.3.2.4)
+pub fn eq(a: HostName, b: HostName) bool {
+    return ascii.eqlIgnoreCase(a.bytes, b.bytes);
 }
