@@ -4,7 +4,7 @@ const testing = std.testing;
 
 pub const HostName = @This();
 
-// validated, hostname bytes as a static, comptime initialized variable
+// validated, hostname bytes as a static variable
 bytes: []const u8,
 
 /// Max supported host name length
@@ -92,6 +92,23 @@ test validate {
 pub fn init(bytes: []const u8) ValidateError!HostName {
     try validate(bytes);
     return .{ .bytes = bytes };
+}
+
+pub fn sameParentDomain(parent: HostName, child: HostName) bool {
+    const parent_bytes = parent.bytes;
+    const child_bytes = child.bytes;
+
+    if (!ascii.endsWithIgnoreCase(child_bytes, parent_bytes)) return false;
+    if (child_bytes.len == parent_bytes.len) return true;
+    if (parent_bytes.len > child_bytes.len) return false;
+    return child_bytes[child_bytes.len - parent_bytes.len - 1] == '.';
+}
+
+test sameParentDomain {
+    try testing.expect(!sameParentDomain(try .init("foo.com"), try .init("bar.com")));
+    try std.testing.expect(sameParentDomain(try .init("foo.com"), try .init("foo.com")));
+    try std.testing.expect(sameParentDomain(try .init("foo.com"), try .init("bar.foo.com")));
+    try std.testing.expect(!sameParentDomain(try .init("bar.foo.com"), try .init("foo.com")));
 }
 
 /// Domain names are case-insensitive (RFC 5890, Section 2.3.2.4)
