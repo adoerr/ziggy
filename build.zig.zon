@@ -3,13 +3,10 @@
     .version = "0.0.0",
     // Changing the fingerprint has security and trust implications
     .fingerprint = 0x7d935ea736d9bcb2,
-    .minimum_zig_version = "0.16.0-dev.2670+56253d9e3",
+    .minimum_zig_version = "0.16.0-dev.2676+4e2cec265",
     .dependencies = .{},
     .paths = .{
         "build.zig",
         "build.zig.zon",
-        "async",
-        "base64",
-        "basics",
     },
 }
