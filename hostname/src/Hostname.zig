@@ -1,6 +1,9 @@
 const std = @import("std");
+
+const Io = std.Io;
 const ascii = std.ascii;
 const testing = std.testing;
+const net = std.Io.net;
 
 pub const HostName = @This();
 
@@ -115,3 +118,27 @@ test sameParentDomain {
 pub fn eq(a: HostName, b: HostName) bool {
     return ascii.eqlIgnoreCase(a.bytes, b.bytes);
 }
+
+pub const LookupOptions = struct {
+    port: u16,
+    canoical_name_buffer: *[MAX_LEN]u8,
+    /// `null` is either address family
+    family: ?net.IpAddress.Family = null,
+};
+
+pub const LookupError = error{
+    UnknownHostName,
+    ResolvConfParseFailed,
+    InvalidDnsARecord,
+    InvalidDnsAAAARecord,
+    InvalidDnsCnameRecord,
+    NameServerFailure,
+    NoAddressReturned,
+    /// Failed to open or read `/etc/hosts` or `/etc/resolv.conf`.
+    FetchNetworkConfigFailed,
+} || net.IpAddress.BindError || Io.Cancelable;
+
+pub const LookupResult = union(enum) {
+    address: net.IpAddress,
+    canonical_name: HostName,
+};
