@@ -17,6 +17,18 @@ info: union(enum) {
 
 pub const Error = error{ NoXdgRuntimeDir, PathTooLong };
 
+pub fn default(init: std.process.Init) Error!Address {
+    if (init.environ_map.get("WAYLAND_SOCKET")) |sock_str| {
+        if (std.fmt.parseInt(std.posix.fd_t, sock_str, 10)) |sock|
+            return .initSocket(sock)
+        else |_| {}
+    }
+
+    const display = init.environ_map.get("WAYLAND_DISPLATY") orelse "wayland-0";
+
+    return .initEndpoint(init, display);
+}
+
 pub fn initSocket(sock: std.os.linux.fd_t) Address {
     return Address{
         .strategy = .sock,
