@@ -72,3 +72,17 @@ pub fn format(self: Address, w: *std.Io.Writer) std.Io.Writer.Error!void {
         },
     }
 }
+
+test "initAbsolutePath success" {
+    const path = "/tmp/mysocket.sock";
+    const addr = try Address.initAbsolutePath(path);
+    try std.testing.expectEqual(Address.ConnectionStrategy.path, addr.strategy);
+    try std.testing.expectEqualStrings(path, std.mem.sliceTo(&addr.info.path, 0));
+}
+
+test "initAbsolutePath too long" {
+    var big_buffer: [200]u8 = undefined;
+    @memset(&big_buffer, 'a');
+    const addr = Address.initAbsolutePath(&big_buffer);
+    try std.testing.expectError(Address.Error.PathTooLong, addr);
+}
