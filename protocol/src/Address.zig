@@ -11,7 +11,7 @@ const ConnectionStrategy = enum {
 strategy: ConnectionStrategy,
 
 info: union(enum) {
-    sock: std.os.linux.fd_t,
+    sock: std.posix.fd_t,
     path: [std.Io.net.UnixAddress.max_len:0]u8,
 },
 
@@ -29,7 +29,7 @@ pub fn default(init: std.process.Init) Error!Address {
     return .initEndpoint(init, display);
 }
 
-pub fn initSocket(sock: std.os.linux.fd_t) Address {
+pub fn initSocket(sock: std.posix.fd_t) Address {
     return Address{
         .strategy = .sock,
         .info = .{ .sock = sock },
@@ -45,6 +45,16 @@ pub fn initEndpoint(init: std.process.Init, endpoint: []const u8) Error!Address 
     };
     _ = std.fmt.bufPrintSentinel(&self.info.path, "{s}/{s}", .{ xdg_rt_dir, endpoint }, 0) catch return error.PathTooLong;
 
+    return self;
+}
+
+pub fn initAbsolutePath(path: []const u8) Error!Address {
+    if (path.len > std.Io.net.UnixAddress.max_len) return error.PathTooLong;
+    var self = Address{
+        .strategy = .path,
+        .info = .{ .path = @splat(0) },
+    };
+    @memcpy(self.info.path[0..path.len], path);
     return self;
 }
 
