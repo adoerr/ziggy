@@ -1,7 +1,7 @@
 .{
-    .name = .protocol,
+    .name = .wayland,
     .version = "0.0.0",
-    .fingerprint = 0xc8c0bc4ca5c7c7cf, // Changing this has security and trust implications.
+    .fingerprint = 0xa8d655e4479d664, // Changing this has security and trust implications.
     .minimum_zig_version = "0.16.0-dev.2676+4e2cec265",
     .dependencies = .{},
     .paths = .{

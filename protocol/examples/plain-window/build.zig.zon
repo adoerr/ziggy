@@ -1,0 +1,12 @@
+.{
+    .name = .plain_window,
+    .version = "0.0.0",
+    .fingerprint = 0xe16e687c68ce2b2d, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.16.0-dev.2676+4e2cec265",
+    .dependencies = .{ .wayland = .{ .path = "../../" } },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
