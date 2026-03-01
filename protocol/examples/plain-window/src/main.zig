@@ -9,7 +9,10 @@ pub fn main(init: std.process.Init) !void {
     const stdout = &out_file_writer.interface;
 
     const addr = try wayland.Address.initEndpoint(init, "wayland-0");
+    const path: []const u8 = &addr.info.path;
 
-    try stdout.print("Address: {}\n", .{addr});
+    try addr.format(stdout);
+    try stdout.print("\nPath: '{s}'\n", .{path});
+    try stdout.print("\n", .{});
     try stdout.flush();
 }

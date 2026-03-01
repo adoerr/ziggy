@@ -35,3 +35,18 @@ pub fn initEndpoint(init: std.process.Init, endpoint: []const u8) Error!Address 
 
     return self;
 }
+
+pub fn format(self: Address, w: *std.Io.Writer) std.Io.Writer.Error!void {
+    switch (self.strategy) {
+        .sock => try w.print("socket fd: '{d}'", .{self.info.sock}),
+        .name => {
+            const idx = if (std.mem.findScalarLast(u8, &self.info.path, '/')) |i| i + 1 else 0;
+            const endpoint = std.mem.sliceTo(self.info.path[idx..], 0);
+            try w.print("endpoint: '{s}'", .{endpoint});
+        },
+        .path => {
+            const path = std.mem.sliceTo(&self.info.path, 0);
+            try w.print("absolute path '{s}'", .{path});
+        },
+    }
+}
