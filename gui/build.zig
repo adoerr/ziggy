@@ -19,10 +19,12 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "gui", .module = mod },
+                .{ .name = "wayland", .module = wayland.module("wayland_core") },
+                .{ .name = "wl_client", .module = wayland.module("wayland_client_protocol") },
+                .{ .name = "xdg_shell", .module = wayland.module("xdg_shell_client_protocol") },
             },
         }),
     });
-    exe.root_module.addImport("wayland", wayland.module("wayland_core"));
 
     b.installArtifact(exe);
 
