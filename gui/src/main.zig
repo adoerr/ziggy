@@ -25,22 +25,20 @@ pub fn main(init: std.process.Init) !void {
     log.info("Connected to {f}", .{addr});
 
     registry = try disp.getRegistry(&conn);
-    const cb_id = try disp.sync(&conn);
-
-    log.debug("Got callback {}", .{cb_id.getId()});
+    _ = try disp.sync(&conn);
 
     while (conn.nextMessage(Event, .none)) |event| {
         switch (event) {
-            .wl_registry => |reg| switch (reg) {
-                .global => |glbl| {
-                    log.debug("Global {}", .{glbl});
+            .wl_registry => |r| switch (r) {
+                .global => |g| {
+                    const n = @field(g, "interface");
+                    log.debug("Interface: `{s}`", .{n});
                 },
-                .global_remove => |rm| {
-                    std.log.debug("Ignore: {}", .{rm});
+                .global_remove => {
+                    // Ignore
                 },
             },
-            .wl_callback => |cb| {
-                log.debug("Callback {}", .{cb});
+            .wl_callback => {
                 break; // all globals received
             },
             else => log.err("Unexpected event: {}", .{event}),
