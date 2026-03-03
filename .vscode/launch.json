@@ -1,0 +1,50 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug PS Interpreter",
+            "type": "lldb",
+            "request": "launch",
+            // Point this to the executable created by `zig build`
+            // For 'ladder', change to: "${workspaceFolder}/ladder/zig-out/bin/ladder"
+            "program": "${workspaceFolder}/ps/zig-out/bin/ps", 
+            "args": [],
+            "cwd": "${workspaceFolder}/ps",
+            "stopOnEntry": false,
+            "preLaunchTask": "" ,
+            "initCommands": [
+                "command script import lldb_pretty_printers.py",
+                "type category enable zig.lang zig.std zig"
+            ]   
+        },
+        {
+            "name": "Debug Ladder",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/ladder/zig-out/bin/ladder",
+            "args": [],
+            "cwd": "${workspaceFolder}/ladder",
+            "console": "integratedTerminal", // specific for interactive apps
+            "initCommands": [
+                "command script import lldb_pretty_printers.py",
+                "type category enable zig.lang zig.std zig"
+            ]   
+
+        },
+        {
+            "name": "Debug GUI",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/gui/zig-out/bin/gui",
+            "args": [],
+            "cwd": "${workspaceFolder}/gui",
+            "console": "integratedTerminal", // specific for interactive apps
+            "initCommands": [
+                "command script import lldb_pretty_printers.py",
+                "type category enable zig.lang zig.std zig"
+            ]   
+
+        }
+
+    ]
+}

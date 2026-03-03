@@ -14,7 +14,7 @@
 **/*.rs.bk
 
 # Ignore VSCode stuff
-**/.vscode
+#**/.vscode
 
 # Ignore CLion stuff
 **/.idea
