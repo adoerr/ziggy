@@ -6,10 +6,11 @@ pub fn build(b: *std.Build) void {
 
     const wayland = b.dependency("wayland", .{});
 
-    const mod = b.addModule("gui", .{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-    });
+    const mod = b.addModule("gui", .{ .root_source_file = b.path("src/root.zig"), .target = target, .optimize = optimize, .imports = &.{
+        .{ .name = "wayland", .module = wayland.module("wayland_core") },
+        .{ .name = "wl_client", .module = wayland.module("wayland_client_protocol") },
+        .{ .name = "xdg_shell", .module = wayland.module("xdg_shell_client_protocol") },
+    } });
 
     const exe = b.addExecutable(.{
         .name = "gui",

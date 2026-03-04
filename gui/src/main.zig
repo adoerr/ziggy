@@ -8,7 +8,6 @@ const xdg_shell = @import("xdg_shell");
 const Io = std.Io;
 const log = std.log.scoped(.main);
 
-var connection: wayland.Connection = undefined;
 const display: wl_client.Display = .display; // object ID 1 is always implicitly assigned to `wl_display`
 var registry: wl_client.Registry = .invalid;
 var compositor: wl_client.Compositor = .invalid;
@@ -19,20 +18,22 @@ var surface: wl_client.Surface = .invalid;
 const Event = wayland.Message(.{ wl_client, xdg_shell });
 
 pub fn main(init: std.process.Init) !void {
+    var state = gui.State{};
+
     const addr = try wayland.Address.default(init);
 
-    connection = wayland.Connection.init(init.io, init.gpa, addr) catch |err| {
+    state.connection = wayland.Connection.init(init.io, init.gpa, addr) catch |err| {
         log.err("Failed to connect to {f}: {t}", .{ addr, err });
         return err;
     };
-    defer connection.deinit();
+    defer state.connection.deinit();
 
     log.info("Connected to {f}", .{addr});
 
-    registry = try display.getRegistry(&connection);
-    _ = try display.sync(&connection);
+    registry = try display.getRegistry(&state.connection);
+    _ = try display.sync(&state.connection);
 
-    while (connection.nextMessage(Event, .none)) |event| {
+    while (state.connection.nextMessage(Event, .none)) |event| {
         switch (event) {
             .wl_registry => |r| switch (r) {
                 .global => |g| {
@@ -43,11 +44,11 @@ pub fn main(init: std.process.Init) !void {
 
                     // bind to globals `wl_compositor`, `wl_shm` and `xdg_wm_base`
                     if (std.mem.eql(u8, iface, wl_client.Compositor.interface)) {
-                        compositor = try registry.bind(&connection, wl_client.Compositor, .v1, g.name);
+                        compositor = try registry.bind(&state.connection, wl_client.Compositor, .v1, g.name);
                     } else if (std.mem.eql(u8, iface, wl_client.Shm.interface)) {
-                        shm = try registry.bind(&connection, wl_client.Shm, .v1, g.name);
+                        shm = try registry.bind(&state.connection, wl_client.Shm, .v1, g.name);
                     } else if (std.mem.eql(u8, iface, xdg_shell.WmBase.interface)) {
-                        wm_base = try registry.bind(&connection, xdg_shell.WmBase, .v1, g.name);
+                        wm_base = try registry.bind(&state.connection, xdg_shell.WmBase, .v1, g.name);
                     }
                 },
                 .global_remove => {
@@ -67,16 +68,16 @@ pub fn main(init: std.process.Init) !void {
     // Assert all globals needed are bound
     std.debug.assert(compositor != .invalid and shm != .invalid and wm_base != .invalid);
 
-    surface = try compositor.createSurface(&connection);
-    const xdg_surface = try wm_base.getXdgSurface(&connection, surface);
-    _ = try xdg_surface.getToplevel(&connection);
-    try surface.commit(&connection);
+    surface = try compositor.createSurface(&state.connection);
+    const xdg_surface = try wm_base.getXdgSurface(&state.connection, surface);
+    _ = try xdg_surface.getToplevel(&state.connection);
+    try surface.commit(&state.connection);
 
     // Main loop
-    while (connection.nextMessage(Event, .none)) |event| switch (event) {
+    while (state.connection.nextMessage(Event, .none)) |event| switch (event) {
         .xdg_wm_base => |ev| {
             log.debug("xdg_wm_base event: {}", .{ev});
-            try wm_base.pong(&connection, ev.ping.serial);
+            try wm_base.pong(&state.connection, ev.ping.serial);
         },
         else => log.info("Unexpected event: {}", .{event}),
     } else |err| {

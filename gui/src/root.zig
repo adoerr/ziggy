@@ -4,17 +4,17 @@ const wl_client = @import("wl_client");
 const xdg_shell = @import("xdg_shell");
 
 pub const State = struct {
-    connection: wayland.Connection = .invalid,
+    connection: wayland.Connection = undefined,
     registry: wl_client.Registry = .invalid,
     compositor: wl_client.Compositor = .invalid,
     shm: wl_client.Shm = .invalid,
     wm_base: xdg_shell.WmBase = .invalid,
     surface: wl_client.Surface = .invalid,
-    buffer: wayland.buffer = .invalid,
+    buffer: wl_client.Buffer = .invalid,
     shared_memory: []align(4096) u8 = undefined,
 };
 
-pub fn allocBuffer(state: State, width: comptime_int, height: comptime_int) !void {
+pub fn allocBuffer(state: *State, width: comptime_int, height: comptime_int) !void {
     const stride = width * 4;
     const size = stride * height;
     const fd = try newSharedMemoryFile(size);
