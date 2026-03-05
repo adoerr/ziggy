@@ -9,6 +9,7 @@ const log = std.log.scoped(.gui);
 const display: wl_client.Display = .display; // `wl_display` has aways the special reserved id of `1`
 var connection: wayland.Connection = undefined;
 var registry: wl_client.Registry = .invalid;
+var configured = false;
 
 const Event = wayland.Message(.{ wl_client, xdg_shell });
 
@@ -17,7 +18,7 @@ pub const State = struct {
     shm: wl_client.Shm = .invalid,
     wm_base: xdg_shell.WmBase = .invalid,
     surface: wl_client.Surface = .invalid,
-    buffer: wl_client.Buffer = .invalid,
+    buffer: wl_client.Buffer = .invalid, // opaque pixel container
     shared_memory: []align(4096) u8 = undefined,
 };
 
@@ -46,7 +47,7 @@ pub fn setup(init: std.process.Init, state: *State) !void {
 
                     // bind to globals `wl_compositor`, `wl_shm` and `xdg_wm_base`
                     if (std.mem.eql(u8, iface, wl_client.Compositor.interface)) {
-                        state.compositor = try registry.bind(&connection, wl_client.Compositor, .v1, g.name);
+                        state.compositor = try registry.bind(&connection, wl_client.Compositor, .v4, g.name);
                     } else if (std.mem.eql(u8, iface, wl_client.Shm.interface)) {
                         state.shm = try registry.bind(&connection, wl_client.Shm, .v1, g.name);
                     } else if (std.mem.eql(u8, iface, xdg_shell.WmBase.interface)) {
@@ -85,9 +86,12 @@ pub fn setup(init: std.process.Init, state: *State) !void {
         .xdg_surface => |ev| {
             log.debug("Event {}", .{ev});
             try xdg_surf.ackConfigure(&connection, ev.configure.serial);
-            try allocBuffer(state, 256, 256);
-            try state.surface.attach(&connection, state.buffer, 256, 256);
+            if (!configured) {
+                try allocBuffer(state, 256, 256);
+                try state.surface.attach(&connection, state.buffer, 256, 256);
+            }
             try state.surface.commit(&connection);
+            configured = true;
         },
         .xdg_toplevel => |ev| switch (ev) {
             .close => {
