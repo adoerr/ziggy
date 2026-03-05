@@ -58,6 +58,7 @@ pub fn setup(init: std.process.Init, state: *State) !void {
                 },
             },
             .wl_callback => {
+                log.debug("Callback.done - all globals received", .{});
                 break; // all globals received
             },
             else => log.err("Unexpected event: {}", .{event}),
@@ -69,9 +70,39 @@ pub fn setup(init: std.process.Init, state: *State) !void {
 
     // Assert all globals needed are bound
     std.debug.assert(state.compositor != .invalid and state.shm != .invalid and state.wm_base != .invalid);
+
+    state.surface = try state.compositor.createSurface(&connection);
+    const xdg_surf = try state.wm_base.getXdgSurface(&connection, state.surface);
+    _ = try xdg_surf.getToplevel(&connection);
+
+    try state.surface.commit(&connection);
+
+    // Main loop
+    while (connection.nextMessage(Event, .none)) |event| switch (event) {
+        .xdg_wm_base => |ev| {
+            try state.wm_base.pong(&connection, ev.ping.serial);
+        },
+        .xdg_surface => |ev| {
+            log.debug("Event {}", .{ev});
+            try xdg_surf.ackConfigure(&connection, ev.configure.serial);
+            try allocBuffer(state, 256, 256);
+            try state.surface.attach(&connection, state.buffer, 256, 256);
+            try state.surface.commit(&connection);
+        },
+        .xdg_toplevel => |ev| switch (ev) {
+            .close => {
+                log.debug("Event: {}", .{ev});
+                break;
+            },
+            else => {},
+        },
+        else => log.debug("Event: {}", .{event}),
+    } else |err| {
+        log.debug("Error {}", .{err});
+    }
 }
 
-pub fn teardown() void {
+pub fn deinit() void {
     defer connection.deinit();
 }
 
@@ -100,19 +131,19 @@ pub fn allocBuffer(state: *State, width: comptime_int, height: comptime_int) !vo
     const fd = try newSharedMemoryFile(size);
     defer _ = std.os.linux.close(fd);
 
-    state.shared_memory = try std.os.linux.mmap(null, size, .{ .READ = true, .WRITE = true }, .{ .TYPE = .SHARED }, fd, 0);
+    state.shared_memory = try std.posix.mmap(null, size, .{ .READ = true, .WRITE = true }, .{ .TYPE = .SHARED }, fd, 0);
     // Fill the buffer with white pixels
     @memset(state.shared_memory, 255);
 
     const pool = try state.shm.createPool(&connection, fd, size);
-    defer pool.destroy(&state.connection) catch {};
+    defer pool.destroy(&connection) catch {};
 
     state.buffer = try pool.createBuffer(&connection, 0, width, height, stride, .argb8888);
 }
 
 /// Create a new shared memory file truncated to `size` bytes.
 /// Return the shared memory file descriptor.
-pub fn newSharedMemoryFile(size: usize) !32 {
+pub fn newSharedMemoryFile(size: usize) !i32 {
     const fd = try sharedMemoryFile();
     return switch (std.os.linux.errno(std.os.linux.ftruncate(fd, @intCast(size)))) {
         .SUCCESS => fd,
@@ -121,7 +152,7 @@ pub fn newSharedMemoryFile(size: usize) !32 {
 }
 
 /// Create a shared memory file an return the file descriptor
-fn sharedMemoryFile() !32 {
+fn sharedMemoryFile() !i32 {
     const prefix = "/dev/shm/wl-shm-";
     const perm = 0o0600;
     const options: std.os.linux.O = .{
@@ -135,8 +166,8 @@ fn sharedMemoryFile() !32 {
     var path: [22:0]u8 = @splat(0);
     @memcpy(path[0..prefix.len], prefix);
 
-    const fd: 32 = while (true) {
-        try randomizeAscii(path[prefix.len..]);
+    const fd: i32 = while (true) {
+        randomizeAscii(path[prefix.len..]);
         const rc = std.os.linux.open(&path, options, perm);
         switch (std.os.linux.errno(rc)) {
             .SUCCESS => break @intCast(rc),

@@ -8,7 +8,7 @@ pub fn main(init: std.process.Init) !void {
     var state = gui.State{};
 
     try gui.setup(init, &state);
-    defer gui.teardown();
+    defer gui.deinit();
 
     try gui.createSurface(&state);
 }
