@@ -1,7 +1,4 @@
 const std = @import("std");
-const Io = std.Io;
-var threaded: Io.Threaded = .init_single_threaded;
-const io = threaded.ioBasic();
 
 pub fn build(b: *std.Build) void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -15,13 +12,6 @@ pub fn build(b: *std.Build) void {
     build_http_step.dependOn(&http_server.step);
     b.getInstallStep().dependOn(&http_server.step);
 
-    // build the `cat` programm
-    const cat = b.addSystemCommand(&.{ "zig", "build" });
-    cat.cwd = b.path("cat");
-    const build_cat_step = b.step("cat", "Build the `cat` programm");
-    build_cat_step.dependOn(&cat.step);
-    b.getInstallStep().dependOn(&cat.step);
-
     // build the `ladder` programm
     const ladder = b.addSystemCommand(&.{ "zig", "build" });
     ladder.cwd = b.path("ladder");
@@ -29,17 +19,17 @@ pub fn build(b: *std.Build) void {
     build_ladder_step.dependOn(&ladder.step);
     b.getInstallStep().dependOn(&ladder.step);
 
-    // build the 'sysinfo' programm
-    const sysinfo = b.addSystemCommand(&.{ "zig", "build" });
-    sysinfo.cwd = b.path("sysinfo");
-    const build_sysinfo_step = b.step("sysinfo", "Build the `sysinfo` programm");
-    build_sysinfo_step.dependOn(&sysinfo.step);
-    b.getInstallStep().dependOn(&sysinfo.step);
-
     // build the `ps` programm
     const ps = b.addSystemCommand(&.{ "zig", "build" });
     ps.cwd = b.path("ps");
     const build_ps_step = b.step("ps", "Build the PostScript interpreter");
     build_ps_step.dependOn(&ps.step);
     b.getInstallStep().dependOn(&ps.step);
+
+    // build the `gui` programm
+    const gui = b.addSystemCommand(&.{ "zig", "build" });
+    gui.cwd = b.path("gui");
+    const build_gui_step = b.step("gui", "Build the PostScript interpreter");
+    build_gui_step.dependOn(&gui.step);
+    b.getInstallStep().dependOn(&gui.step);
 }
