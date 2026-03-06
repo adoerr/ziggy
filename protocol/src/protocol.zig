@@ -2,4 +2,5 @@
 const std = @import("std");
 
 pub const Address = @import("Address.zig");
-pub const Fixed = @import("Fixed.zig");
+pub const Fixed = @import("fixed.zig");
+pub const WireFormat = @import("WireFormat.zig");

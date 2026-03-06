@@ -8,7 +8,6 @@ pub fn main(init: std.process.Init) !void {
     const stdout = &out_writer.interface;
 
     const addr = try wayland.Address.default(init);
-    try addr.format(stdout);
-    try stdout.print("\n", .{});
+    try stdout.print("Address: {f}\n", .{addr});
     try stdout.flush();
 }
