@@ -1,0 +1,14 @@
+.{
+    .name = .way_client,
+    .version = "0.0.0",
+    .fingerprint = 0xac03d563d94999bd, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.16.0-dev.2682+02142a54d",
+    .dependencies = .{
+        .protocol = .{ .path = "../.." },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
