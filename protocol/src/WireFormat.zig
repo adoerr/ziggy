@@ -88,6 +88,63 @@ test "serializeOptionalObject" {
     try std.testing.expectEqual(TestInterface.invalid, std.mem.bytesToValue(TestInterface, &buf));
 }
 
+/// Serialize the backing i32 of a `Fixed`. Return `@sizeof(i32)`
+fn serializeFixed(buffer: []u8, fixed: Fixed) usize {
+    return serializeInt(buffer, @intFromEnum(fixed));
+}
+
+test "serializeFixed" {
+    var buf: [4]u8 = undefined;
+    try std.testing.expectEqual(4, serializeFixed(&buf, .from(2.1)));
+    try std.testing.expectApproxEqAbs(2.1, std.mem.bytesToValue(Fixed, &buf).to(f64), 0.01);
+}
+
+/// Serialize `string` by starting with an unsigned 32-bit length (including null
+/// terminator), followed by the UTF-8 encoded string contents, including terminating
+/// null byte, then padding to a 32-bit boundary. A null value is represented with
+/// a length of 0. Interior null bytes are not permitted.
+fn serializeString(buffer: []u8, string: [:0]const u8) usize {
+    // unsigned 32-big string length
+    const idx = serializeUint(buffer, @intCast(string.len + 1));
+    // followed by string content
+    @memcpy(buffer[idx..][0..string.len], string);
+    // terminating null value
+    buffer[idx + string.len] = 0;
+    // align length of serialized string to a 32-bit boundary
+    return idx + alignTo4(string.len + 1);
+}
+
+test "serializeString" {
+    const message = "hello, world";
+    var buf: [20]u8 = undefined;
+    try std.testing.expectEqual(buf.len, serializeString(&buf, message));
+    const len = std.mem.bytesToValue(u32, buf[0..4]);
+    try std.testing.expectEqual(message.len + 1, len);
+    try std.testing.expectEqualSlices(u8, message, buf[4..][0..message.len]);
+}
+
+/// If `string` is not `null` serialize it as a regular string, otherwise zero
+/// is used as a sentinel for no content. Return `sizeof(u32)`
+fn serializeOptionalString(buffer: []u8, string: ?[:0]const u8) usize {
+    return if (string) |s|
+        serializeString(buffer, s)
+    else
+        serializeUint(buffer, 0);
+}
+
+test "serializeOptionalString" {
+    const message = "optional hello, world";
+    var buf: [28]u8 = undefined;
+    try std.testing.expectEqual(buf.len, serializeOptionalString(&buf, message));
+    const len = std.mem.bytesToValue(u32, buf[0..4]);
+    try std.testing.expectEqual(message.len + 1, len);
+    try std.testing.expectEqualSlices(u8, message, buf[4..][0..message.len]);
+    // serialize `null` string
+    try std.testing.expectEqual(4, serializeOptionalString(&buf, null));
+    const len2 = std.mem.bytesToValue(u32, buf[0..4]);
+    try std.testing.expectEqual(0, len2);
+}
+
 /// Return the message size in bytes starting at the header (i.e. every message
 /// has at least a minimum size of 8).
 ///

@@ -24,7 +24,7 @@ pub const Fixed = enum(i32) {
         };
     }
 
-    /// Equivelant of `self + other`.
+    /// Equivalent of `self + other`.
     pub fn add(self: Fixed, other: Fixed) Fixed {
         return @enumFromInt(@as(i32, @intFromEnum(self)) + @as(i32, @intFromEnum(other)));
     }
