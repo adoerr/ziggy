@@ -35,7 +35,7 @@ pub const Header = switch (builtin.target.cpu.arch.endian()) {
 };
 
 /// The 32-bit object ID. Generally, the interface used for the new object is inferred from the xml, but in the case where
-/// it's not specified, a new_id is preceded by a string specifying the interface name, and a uint specifying the version.
+/// it's not specified, a new_id is preceded by a string specifying the interface name, and a `uint` specifying the version.
 pub const NewId = struct {
     interface: [:0]const u8,
     version: u32,
@@ -49,6 +49,28 @@ pub const NewId = struct {
         };
     }
 };
+
+fn serializeInt(buffer: []u8, int: i32) usize {
+    std.mem.bytesAsValue(i32, buffer[0..@sizeOf(i32)]).* = int;
+    return @sizeOf(i32);
+}
+
+test "serializeInt" {
+    var buf: [4]u8 = undefined;
+    try std.testing.expectEqual(4, serializeInt(&buf, -65536));
+    try std.testing.expectEqual(-65536, std.mem.bytesToValue(i32, &buf));
+}
+
+fn serializeUint(buffer: []u8, uint: u32) usize {
+    std.mem.bytesAsValue(u32, buffer[0..@sizeOf(u32)]).* = uint;
+    return @sizeOf(u32);
+}
+
+test "serializeUint" {
+    var buf: [4]u8 = undefined;
+    try std.testing.expectEqual(4, serializeUint(&buf, 65536));
+    try std.testing.expectEqual(65536, std.mem.bytesToValue(u32, &buf));
+}
 
 /// Return the message size in bytes starting at the header (i.e. every message
 /// has at least a minimum size of 8).
