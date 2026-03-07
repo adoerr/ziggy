@@ -49,3 +49,24 @@ pub const NewId = struct {
         };
     }
 };
+
+/// Round `value` up to the next multiple of 4
+fn alignTo4(value: anytype) @TypeOf(value) {
+    const T = @TypeOf(value);
+    return switch (@typeInfo(T)) {
+        .int => (value + 3) & ~@as(T, 3),
+        else => @compileError("alignTo4: Invalid type"),
+    };
+}
+
+test "alignTo4" {
+    try std.testing.expectEqual(0, alignTo4(@as(usize, 0)));
+    try std.testing.expectEqual(4, alignTo4(@as(usize, 4)));
+    try std.testing.expectEqual(4, alignTo4(@as(usize, 3)));
+    try std.testing.expectEqual(24, alignTo4(@as(u18, 21)));
+    try std.testing.expectEqual(100, alignTo4(@as(u16, 97)));
+    try std.testing.expectEqual(1024, alignTo4(@as(u32, 1021)));
+    try std.testing.expectEqual(1024, alignTo4(@as(u32, 1022)));
+    try std.testing.expectEqual(1024, alignTo4(@as(u32, 1023)));
+    try std.testing.expectEqual(1024, alignTo4(@as(u32, 1024)));
+}
