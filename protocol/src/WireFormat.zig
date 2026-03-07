@@ -50,6 +50,42 @@ pub const NewId = struct {
     }
 };
 
+/// Return the message size in bytes starting at the header (i.e. every message
+/// has at least a minimum size of 8).
+///
+/// `args` is an anonymous struct literal containing all the message arguments.
+fn messageLength(args: anytype) u16 {
+    var length: u16 = @intCast(@sizeOf(Header));
+
+    // iterate over the message arguments struct
+    inline for (@typeInfo(@TypeOf(args)).@"struct".fields) |field| {
+        const f = @field(args, field.name);
+        length += switch (field.type) {
+            []const u8 => @intCast(alignTo4(f.len) + 4),
+            [:0]const u8 => @intCast(alignTo4(f.len + 1) + 4),
+            ?[:0]const u8 => if (f) |s| @intCast(alignTo4(s.len + 1) + 4) else 4,
+            NewId => @intCast(alignTo4(f.interface.len + 1) + 12),
+            else => 4,
+        };
+    }
+
+    return length;
+}
+
+test "messageLength" {
+    const new_id = @as(NewId, .{ .interface = "test", .version = 1, .new_id = 100 });
+    const args = .{
+        @as(i32, -1), // + 4 = 12
+        @as(u32, 2), // + 4 = 16
+        Fixed.from(12.34), // + 4 = 20
+        @as(?[:0]const u8, null), // + 4 = 24
+        new_id, // + 8 + 12 = 44
+        @as([]const u8, &.{ 0, 1, 2, 3, 4 }), // + 4 + 8 = 56
+    };
+
+    try std.testing.expectEqual(56, messageLength(args));
+}
+
 /// Round `value` up to the next multiple of 4
 fn alignTo4(value: anytype) @TypeOf(value) {
     const T = @TypeOf(value);
