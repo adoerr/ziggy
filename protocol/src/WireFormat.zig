@@ -41,7 +41,7 @@ pub const NewId = struct {
     version: u32,
     new_id: u32,
 
-    pub fn init(comptime T: type, version: T.version, new_id: u32) NewId {
+    pub fn init(comptime T: type, version: T.Version, new_id: u32) NewId {
         return .{
             .interface = T.interface,
             .version = @intFromEnum(version),
@@ -143,6 +143,27 @@ test "serializeOptionalString" {
     try std.testing.expectEqual(4, serializeOptionalString(&buf, null));
     const len2 = std.mem.bytesToValue(u32, buf[0..4]);
     try std.testing.expectEqual(0, len2);
+}
+
+/// Serialize `new_id` as a string specifying the interface, followed by the
+/// interface version as a `uint`, followed by the  object ID itself also a `uint`.
+fn serializeNewId(buffer: []u8, new_id: NewId) usize {
+    var idx = serializeString(buffer, new_id.interface);
+    idx += serializeUint(buffer[idx..], new_id.version);
+    return idx + serializeUint(buffer[idx..], new_id.new_id);
+}
+
+test "serializeNewId" {
+    const new_id: NewId = .init(TestInterface, .v2, 42);
+    var buf: [24]u8 = undefined;
+    try std.testing.expectEqual(buf.len, serializeNewId(&buf, new_id));
+
+    const len = std.mem.bytesToValue(u32, buf[0..4]);
+    try std.testing.expectEqual(TestInterface.interface.len + 1, len);
+    const bytes = buf[4..][0..TestInterface.interface.len];
+    try std.testing.expectEqualSlices(u8, TestInterface.interface, bytes);
+    try std.testing.expectEqual(2, std.mem.bytesToValue(u32, buf[16..20]));
+    try std.testing.expectEqual(42, std.mem.bytesToValue(u32, buf[20..24]));
 }
 
 /// Return the message size in bytes starting at the header (i.e. every message
