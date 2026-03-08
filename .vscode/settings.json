@@ -2,6 +2,7 @@
     "cSpell.words": [
         "bitfield",
         "libwayland",
-        "memcpy"
+        "memcpy",
+        "posix"
     ]
 }

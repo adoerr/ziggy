@@ -52,6 +52,13 @@ pub const NewId = struct {
 
 pub const SerializeError = error{MessageTooLong};
 
+/// Serialize a message to `buffer`.
+///
+/// - `object_id` is the ID of the object sending the message.
+/// - `opcode` is the message opcode.
+/// - `args` is an anonymous struct containing the message arguments.
+///
+/// Returns the number of bytes written to `buffer`.
 pub fn serializeMessage(buffer: []u8, object_id: u32, comptime opcode: u16, args: anytype) SerializeError!usize {
     // check for max number of arguments
     comptime if (std.meta.fields(@TypeOf(args)).len > max_msg_args) @compileError("Too many args.");
@@ -102,6 +109,90 @@ test "WireFormat.serializeMessage" {
 }
 
 pub const DeserializeError = error{InvalidArguments};
+
+/// Deserialize a message of type `T` from the wire format.
+///
+/// - `bytes` is the buffer containing the message arguments (excluding the header).
+/// - `fds` is the list of file descriptors received with the message.
+///
+/// The message struct `T` is expected to have a `_signature` declaration which is a string
+/// representing the Wayland signature of the message arguments. The first field of the struct
+/// is skipped (usually `_meta: void`).
+pub fn deserializeMessage(
+    comptime T: type,
+    bytes: []const u8,
+    fds: []const std.posix.fd_t,
+) DeserializeError!T {
+    const signature = T._signature;
+    var message: T = undefined;
+    var index: usize = 0;
+    var fd_idx: usize = 0;
+
+    inline for (@typeInfo(T).@"struct".fields[1..], signature) |field, sig_byte| {
+        if (sig_byte == 'd') { // field is an fd
+            if (fd_idx == fds.len) return error.InvalidArguments;
+            @field(message, field.name) = fds[fd_idx];
+            fd_idx += 1;
+            continue;
+        }
+
+        if (index >= bytes.len) return error.InvalidArguments;
+        const val, const size = try deserializeField(field.type, bytes[index..]);
+        @field(message, field.name) = val;
+        index += size;
+    }
+
+    return message;
+}
+
+test "WireFormat.deserializeMessage" {
+    // Normal message
+    const Msg = struct {
+        _meta: void,
+        i: i32,
+        u: u32,
+        f: Fixed,
+        const _signature = "iuf";
+    };
+    {
+        var buf: [128]u8 = undefined;
+        var idx: usize = 0;
+        idx += serializeArg(buf[idx..], @as(i32, -42));
+        idx += serializeArg(buf[idx..], @as(u32, 100));
+        idx += serializeArg(buf[idx..], Fixed.from(12.34));
+        const fds = [0]std.posix.fd_t{};
+        const msg = try deserializeMessage(Msg, buf[0..idx], &fds);
+        try std.testing.expectEqual(-42, msg.i);
+        try std.testing.expectEqual(100, msg.u);
+        try std.testing.expectApproxEqAbs(12.34, msg.f.to(f64), 0.01);
+    }
+    // Message with file descriptor
+    const MsgFd = struct {
+        _meta: void,
+        fd: std.posix.fd_t,
+        val: u32,
+        const _signature = "du";
+    };
+    {
+        var buf: [128]u8 = undefined;
+        // 'd' is not serialized into the byte stream, only 'u'
+        const idx = serializeArg(&buf, @as(u32, 12345));
+        const fds = [_]std.posix.fd_t{42};
+        const msg = try deserializeMessage(MsgFd, buf[0..idx], &fds);
+        try std.testing.expectEqual(42, msg.fd);
+        try std.testing.expectEqual(12345, msg.val);
+    }
+    // Invalid fd count
+    {
+        const fds = [0]std.posix.fd_t{};
+        try std.testing.expectError(error.InvalidArguments, deserializeMessage(MsgFd, &[_]u8{}, &fds));
+    }
+    // Invalid byte length
+    {
+        const fds = [0]std.posix.fd_t{};
+        try std.testing.expectError(error.InvalidArguments, deserializeMessage(Msg, &[_]u8{ 0, 0 }, &fds));
+    }
+}
 
 /// Serialize a single message argument `arg` to `buffer`. Return the length
 /// of `arg` as serialized bytes.
