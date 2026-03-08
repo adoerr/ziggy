@@ -1,8 +1,13 @@
 {
     "cSpell.words": [
         "bitfield",
+        "cmsg",
+        "controllen",
+        "FIRSTHDR",
         "libwayland",
         "memcpy",
+        "msghdr",
+        "NXTHDR",
         "posix"
     ]
 }
