@@ -50,6 +50,57 @@ pub const NewId = struct {
     }
 };
 
+pub const SerializeError = error{MessageTooLong};
+
+pub fn serializeMessage(buffer: []u8, object_id: u32, comptime opcode: u16, args: anytype) SerializeError!usize {
+    // check for max number of arguments
+    comptime if (std.meta.fields(@TypeOf(args)).len > max_msg_args) @compileError("Too many args.");
+    // check for max message size
+    const length = messageLength(args);
+    if (length > max_msg_size) return error.MessageTooLong;
+    // serialize header
+    std.mem.bytesAsValue(Header, buffer[0..@sizeOf(Header)]).* = .{
+        .object = object_id,
+        .opcode = opcode,
+        .length = length,
+    };
+    // index into `buffer` after header serialization
+    var idx: usize = @sizeOf(Header);
+    // serialize each message argument
+    inline for (@typeInfo(@TypeOf(args)).@"struct".fields) |f| {
+        if (idx >= buffer.len) return error.MessageTooLong;
+        idx += serializeArg(buffer[idx..], @field(args, f.name));
+    }
+    // assert that length of the serialized message equals calculated message length
+    std.debug.assert(idx == length);
+    return length;
+}
+
+test "WireFormat.serializeMessage" {
+    var buf: [256]u8 = undefined;
+    const args = .{
+        @as(i32, 42),
+        @as(u32, 100),
+        Fixed.from(12.34),
+        @as(?[:0]const u8, "hello"),
+    };
+    // serialized message length equals expected message length
+    const len = try serializeMessage(&buf, 1, 2, args);
+    const expected_len = @sizeOf(Header) + 4 + 4 + 4 + 12; // 8 + 4 + 4 + 4 + 12 = 32
+    try std.testing.expectEqual(expected_len, len);
+    // header has been serialized correctly
+    const header = std.mem.bytesToValue(Header, buf[0..@sizeOf(Header)]);
+    try std.testing.expectEqual(1, header.object);
+    try std.testing.expectEqual(2, header.opcode);
+    try std.testing.expectEqual(expected_len, header.length);
+    // arguments have been serialized correctly
+    try std.testing.expectEqual(42, std.mem.bytesToValue(i32, buf[8..12]));
+    try std.testing.expectEqual(100, std.mem.bytesToValue(u32, buf[12..16]));
+    try std.testing.expectApproxEqAbs(12.34, std.mem.bytesToValue(Fixed, buf[16..20]).to(f64), 0.01);
+    try std.testing.expectEqual(6, std.mem.bytesToValue(u32, buf[20..24]));
+    try std.testing.expectEqualSlices(u8, "hello", buf[24..29]);
+}
+
 /// Serialize a single message argument `arg` to `buffer`. Return the length
 /// of `arg` as serialized bytes.
 fn serializeArg(buffer: []u8, arg: anytype) usize {
@@ -135,7 +186,7 @@ fn serializeInt(buffer: []u8, int: i32) usize {
     return @sizeOf(i32);
 }
 
-test "serializeInt" {
+test "WireFormat.serializeInt" {
     var buf: [4]u8 = undefined;
     try std.testing.expectEqual(4, serializeInt(&buf, -65536));
     try std.testing.expectEqual(-65536, std.mem.bytesToValue(i32, &buf));
@@ -146,7 +197,7 @@ fn serializeUint(buffer: []u8, uint: u32) usize {
     return @sizeOf(u32);
 }
 
-test "serializeUint" {
+test "WireFormat.serializeUint" {
     var buf: [4]u8 = undefined;
     try std.testing.expectEqual(4, serializeUint(&buf, 65536));
     try std.testing.expectEqual(65536, std.mem.bytesToValue(u32, &buf));
@@ -157,7 +208,7 @@ fn serializeOptionalObject(buffer: []u8, object: anytype) usize {
     return serializeUint(buffer, if (object) |o| o.getId() else 0);
 }
 
-test "serializeOptionalObject" {
+test "WireFormat.serializeOptionalObject" {
     const obj1: ?TestInterface = @enumFromInt(42);
     const obj2: ?TestInterface = null;
 
@@ -173,7 +224,7 @@ fn serializeFixed(buffer: []u8, fixed: Fixed) usize {
     return serializeInt(buffer, @intFromEnum(fixed));
 }
 
-test "serializeFixed" {
+test "WireFormat.serializeFixed" {
     var buf: [4]u8 = undefined;
     try std.testing.expectEqual(4, serializeFixed(&buf, .from(2.1)));
     try std.testing.expectApproxEqAbs(2.1, std.mem.bytesToValue(Fixed, &buf).to(f64), 0.01);
@@ -194,7 +245,7 @@ fn serializeString(buffer: []u8, string: [:0]const u8) usize {
     return idx + alignTo4(string.len + 1);
 }
 
-test "serializeString" {
+test "WireFormat.serializeString" {
     const message = "hello, world";
     var buf: [20]u8 = undefined;
     try std.testing.expectEqual(buf.len, serializeString(&buf, message));
@@ -212,7 +263,7 @@ fn serializeOptionalString(buffer: []u8, string: ?[:0]const u8) usize {
         serializeUint(buffer, 0);
 }
 
-test "serializeOptionalString" {
+test "WireFormat.serializeOptionalString" {
     const message = "optional hello, world";
     var buf: [28]u8 = undefined;
     try std.testing.expectEqual(buf.len, serializeOptionalString(&buf, message));
@@ -233,7 +284,7 @@ fn serializeNewId(buffer: []u8, new_id: NewId) usize {
     return idx + serializeUint(buffer[idx..], new_id.new_id);
 }
 
-test "serializeNewId" {
+test "WireFormat.serializeNewId" {
     const new_id: NewId = .init(TestInterface, .v2, 42);
     var buf: [24]u8 = undefined;
     try std.testing.expectEqual(buf.len, serializeNewId(&buf, new_id));
@@ -285,7 +336,7 @@ fn messageLength(args: anytype) u16 {
     return length;
 }
 
-test "messageLength" {
+test "WireFormat.messageLength" {
     const new_id = @as(NewId, .{ .interface = "test", .version = 1, .new_id = 100 });
     const args = .{
         @as(i32, -1), // + 4 = 12
@@ -308,7 +359,7 @@ fn alignTo4(value: anytype) @TypeOf(value) {
     };
 }
 
-test "alignTo4" {
+test "WireFormat.alignTo4" {
     try std.testing.expectEqual(0, alignTo4(@as(usize, 0)));
     try std.testing.expectEqual(4, alignTo4(@as(usize, 4)));
     try std.testing.expectEqual(4, alignTo4(@as(usize, 3)));
