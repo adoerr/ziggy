@@ -101,6 +101,8 @@ test "WireFormat.serializeMessage" {
     try std.testing.expectEqualSlices(u8, "hello", buf[24..29]);
 }
 
+pub const DeserializeError = error{InvalidArguments};
+
 /// Serialize a single message argument `arg` to `buffer`. Return the length
 /// of `arg` as serialized bytes.
 fn serializeArg(buffer: []u8, arg: anytype) usize {
@@ -336,6 +338,178 @@ fn messageLength(args: anytype) u16 {
     return length;
 }
 
+fn deserializeInt(data: []const u8) DeserializeError!struct { i32, usize } {
+    if (data.len < 4) return error.InvalidArguments;
+    return .{ std.mem.bytesToValue(i32, data[0..4]), 4 };
+}
+
+test "WireFormat.deserializeInt" {
+    const int: i32 = -1;
+    try std.testing.expectEqual(.{ int, @sizeOf(i32) }, try deserializeInt(std.mem.asBytes(&int)));
+    try std.testing.expectError(error.InvalidArguments, deserializeInt(&.{ 0, 1, 2 }));
+}
+
+fn deserializeUint(data: []const u8) DeserializeError!struct { u32, usize } {
+    if (data.len < 4) return error.InvalidArguments;
+    return .{ std.mem.bytesToValue(u32, data[0..4]), 4 };
+}
+
+test "WireFormat.deserializeUint" {
+    const uint: u32 = 1024;
+    try std.testing.expectEqual(.{ uint, @sizeOf(u32) }, try deserializeUint(&.{ 0, 4, 0, 0 }));
+    try std.testing.expectError(error.InvalidArguments, deserializeUint(&.{ 0, 1, 2 }));
+}
+
+fn deserializeFixed(data: []const u8) DeserializeError!struct { Fixed, usize } {
+    if (data.len < 4) return error.InvalidArguments;
+    const raw, _ = try deserializeInt(data);
+    return .{ @enumFromInt(raw), 4 };
+}
+
+test "WireFormat.deserializeFixed" {
+    const fixed: Fixed = .from(1.23);
+    const res, const len = try deserializeFixed(std.mem.asBytes(&fixed));
+    try std.testing.expectApproxEqAbs(1.23, res.to(f64), 0.01);
+    try std.testing.expectEqual(len, 4);
+    try std.testing.expectError(error.InvalidArguments, deserializeFixed(&.{ 0, 1, 2 }));
+}
+
+fn deserializeArray(data: []const u8) DeserializeError!struct { []const u8, usize } {
+    if (data.len < 4) return error.InvalidArguments;
+    const len, _ = try deserializeUint(data);
+    if (alignTo4(len) > data.len - 4) return error.InvalidArguments;
+    return .{ data[4..][0..len], 4 + alignTo4(len) };
+}
+
+test "WireFormat.deserializeArray" {
+    const data = [_]u8{ 8, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7 };
+    const arr, const len = try deserializeArray(&data);
+    try std.testing.expectEqual(data.len, len);
+    try std.testing.expectEqualSlices(u8, data[4..], arr);
+    try std.testing.expectError(error.InvalidArguments, deserializeArray(data[0..10]));
+}
+
+fn deserializeString(data: []const u8) DeserializeError!struct { [:0]const u8, usize } {
+    if (data.len < 4) return error.InvalidArguments;
+    const len, _ = try deserializeUint(data);
+    if (len == 0 or alignTo4(len) > data.len - 4) return error.InvalidArguments;
+    return .{ @ptrCast(data[4..][0 .. len - 1]), 4 + alignTo4(len) };
+}
+
+test "WireFormat.deserializeString" {
+    const string = "hello, world!";
+    const data = [_]u8{ 14, 0, 0, 0 } ++ string ++ [_]u8{ 0, 8, 9, 1, 2, 3, 4 };
+    const str, const len = try deserializeString(data);
+    try std.testing.expectEqual(4 + alignTo4(string.len), len);
+    try std.testing.expectEqualSlices(u8, data[4..][0..string.len], str);
+    try std.testing.expectError(error.InvalidArguments, deserializeString(data[0..10]));
+    try std.testing.expectError(error.InvalidArguments, deserializeString(&.{ 0, 0, 0, 0 }));
+}
+
+fn deserializeOptionalString(data: []const u8) DeserializeError!struct { ?[:0]const u8, usize } {
+    if (data.len < 4) return error.InvalidArguments;
+    const len, _ = try deserializeUint(data);
+    if (len == 0) return .{ null, 4 };
+    if (alignTo4(len) > data.len - 4) return error.InvalidArguments;
+    return .{ @ptrCast(data[4..][0 .. len - 1]), 4 + alignTo4(len) };
+}
+
+test "WireFormat.deserializeOptionalString" {
+    const string = "hello, world!";
+    const data = [_]u8{ 14, 0, 0, 0 } ++ string ++ [_]u8{ 0, 8, 9, 1, 2, 3, 4 };
+    const str, const len = try deserializeOptionalString(data);
+    try std.testing.expectEqual(4 + alignTo4(string.len), len);
+    try std.testing.expect(str != null);
+    try std.testing.expectEqualSlices(u8, data[4..][0..string.len], str.?);
+    try std.testing.expectError(error.InvalidArguments, deserializeOptionalString(data[0..10]));
+    const str2, const len2 = try deserializeOptionalString(&.{ 0, 0, 0, 0 });
+    try std.testing.expectEqual(4, len2);
+    try std.testing.expectEqual(null, str2);
+}
+
+fn deserializeNewId(data: []const u8) DeserializeError!struct { NewId, usize } {
+    if (data.len < 4) return error.InvalidArguments;
+    const interface, const len = try deserializeString(data);
+    if (len + 8 > data.len) return error.InvalidArguments;
+    const version, _ = try deserializeUint(data[len..]);
+    const new_id, _ = try deserializeUint(data[len..][4..]);
+
+    if (version == 0 or new_id == 0) return error.InvalidArguments;
+
+    return .{ .{
+        .interface = interface,
+        .version = version,
+        .new_id = new_id,
+    }, len + 8 };
+}
+
+test "WireFormat.deserializeNewId" {
+    const new_id: NewId = .init(TestInterface, .v2, 1);
+    var buf: [128]u8 = undefined;
+    const len = serializeNewId(&buf, new_id);
+    const new_id2, const len2 = try deserializeNewId(&buf);
+
+    try std.testing.expectEqual(len, len2);
+    try std.testing.expectEqual(new_id.version, new_id2.version);
+    try std.testing.expectEqual(new_id.new_id, new_id2.new_id);
+    try std.testing.expectEqualSlices(u8, new_id.interface, new_id2.interface);
+
+    const new_id3: NewId = .init(TestInterface, .v1, 0);
+    _ = serializeNewId(&buf, new_id3);
+    try std.testing.expectError(error.InvalidArguments, deserializeNewId(&buf));
+}
+
+fn deserializeBitfield(comptime T: type, data: []const u8) DeserializeError!struct { T, usize } {
+    if (data.len < 4) return error.InvalidArguments;
+    const val, const len = try deserializeUint(data);
+    return .{ @bitCast(val), len };
+}
+
+test "WireFormat.deserializeBitfield" {
+    const bf: TestBitfield = .{ .one = false, .two = true };
+    const res, const len = try deserializeBitfield(TestBitfield, &.{ 2, 0, 0, 0 });
+    try std.testing.expectEqual(4, len);
+    try std.testing.expectEqual(bf, res);
+    try std.testing.expectError(error.InvalidArguments, deserializeBitfield(TestBitfield, &.{0}));
+}
+
+fn deserializeEnum(comptime T: type, data: []const u8) DeserializeError!struct { T, usize } {
+    if (data.len < 4) return error.InvalidArguments;
+    const val, const len = switch (@typeInfo(T).@"enum".tag_type) {
+        i32 => try deserializeInt(data),
+        u32 => try deserializeUint(data),
+        else => @compileError("Unexpected enum tag type."),
+    };
+    const enum_val = std.enums.fromInt(T, val) orelse return error.InvalidArguments;
+    return .{ enum_val, len };
+}
+
+test "WireFormat.deserializeEnum" {
+    const res, const len = try deserializeEnum(TestEnum, &.{ 0, 0, 0, 0 });
+    try std.testing.expectEqual(4, len);
+    try std.testing.expectEqual(TestEnum.zero, res);
+    const res2, _ = try deserializeEnum(TestEnum, &.{ 1, 0, 0, 0 });
+    try std.testing.expectEqual(TestEnum.one, res2);
+    try std.testing.expectError(error.InvalidArguments, deserializeEnum(TestEnum, &.{ 2, 0, 0, 0 }));
+}
+
+fn deserializeOptionalObject(comptime T: type, data: []const u8) DeserializeError!struct { ?T, usize } {
+    if (data.len < 4) return error.InvalidArguments;
+    const obj, const len = try deserializeEnum(T, data);
+    if (obj == .invalid) return .{ null, len };
+    return .{ obj, len };
+}
+
+test "WireFormat.deserializeOptionalObject" {
+    const t: ?TestInterface = @enumFromInt(2);
+    const t2: ?TestInterface = null;
+    const res, const len = try deserializeOptionalObject(TestInterface, &.{ 2, 0, 0, 0 });
+    try std.testing.expectEqual(4, len);
+    try std.testing.expectEqual(t, res);
+    const res2, _ = try deserializeOptionalObject(TestInterface, &.{ 0, 0, 0, 0 });
+    try std.testing.expectEqual(t2, res2);
+}
+
 test "WireFormat.messageLength" {
     const new_id = @as(NewId, .{ .interface = "test", .version = 1, .new_id = 100 });
     const args = .{
@@ -387,4 +561,19 @@ const TestInterface = enum(u32) {
     fn getId(self: TestInterface) u32 {
         return @intFromEnum(self);
     }
+};
+
+/// Mock enum for serialization and deserialization unit testing. Mirrors what
+/// is generated by the scanner.
+const TestEnum = enum(i32) {
+    zero = 0,
+    one = 1,
+};
+
+/// Mock bitfield for serialization and deserialization unit testing. Mirrors
+/// what is generated by the scanner
+const TestBitfield = packed struct(u32) {
+    one: bool = false,
+    two: bool = false,
+    _: u30 = 0,
 };
