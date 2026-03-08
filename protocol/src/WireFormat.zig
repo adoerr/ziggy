@@ -338,6 +338,108 @@ fn messageLength(args: anytype) u16 {
     return length;
 }
 
+fn deserializeField(comptime T: type, data: []const u8) DeserializeError!struct { T, usize } {
+    return switch (@typeInfo(T)) {
+        .int => switch (T) {
+            i32 => deserializeInt(data),
+            u32 => deserializeUint(data),
+            else => @compileError("Unexpected int type."),
+        },
+        .@"struct" => switch (T) {
+            NewId => deserializeNewId(data),
+            Fixed => deserializeFixed(data),
+            else => deserializeBitfield(T, data),
+        },
+        .pointer => switch (T) {
+            []const u8 => deserializeArray(data),
+            [:0]const u8 => deserializeString(data),
+            else => @compileError("Invalid pointer type in incoming message."),
+        },
+        .optional => |o| switch (o.child) {
+            [:0]const u8 => deserializeOptionalString(data),
+            else => deserializeOptionalObject(o.child, data),
+        },
+        .@"enum" => deserializeEnum(T, data),
+        else => @compileError(std.fmt.comptimePrint("Unexpected arg type: {s}", .{@typeName(T)})),
+    };
+}
+
+test "WireFormat.deserializeField" {
+    { // int (i32)
+        const val: i32 = -42;
+        const res, const len = try deserializeField(i32, std.mem.asBytes(&val));
+        try std.testing.expectEqual(val, res);
+        try std.testing.expectEqual(4, len);
+    }
+    { // uint (u32)
+        const val: u32 = 42;
+        const res, const len = try deserializeField(u32, std.mem.asBytes(&val));
+        try std.testing.expectEqual(val, res);
+        try std.testing.expectEqual(4, len);
+    }
+    { // Fixed
+        const val = Fixed.from(1.5);
+        const res, const len = try deserializeField(Fixed, std.mem.asBytes(&val));
+        try std.testing.expectApproxEqAbs(1.5, res.to(f64), 0.01);
+        try std.testing.expectEqual(4, len);
+    }
+    { // NewId
+        var buf: [128]u8 = undefined;
+        const new_id = NewId.init(TestInterface, .v1, 123);
+        const l = serializeNewId(&buf, new_id);
+        const res, const len = try deserializeField(NewId, buf[0..l]);
+        try std.testing.expectEqual(new_id.version, res.version);
+        try std.testing.expectEqual(new_id.new_id, res.new_id);
+        try std.testing.expectEqualSlices(u8, new_id.interface, res.interface);
+        try std.testing.expectEqual(l, len);
+    }
+    { // Bitfield
+        const bf: TestBitfield = .{ .one = true, .two = false };
+        const val: u32 = @bitCast(bf);
+        const res, const len = try deserializeField(TestBitfield, std.mem.asBytes(&val));
+        try std.testing.expectEqual(bf, res);
+        try std.testing.expectEqual(4, len);
+    }
+    { // Enum
+        const val: TestEnum = .one;
+        const res, const len = try deserializeField(TestEnum, std.mem.asBytes(&val));
+        try std.testing.expectEqual(val, res);
+        try std.testing.expectEqual(4, len);
+    }
+    { // Array
+        const arr = [_]u8{ 1, 2, 3 };
+        var buf: [128]u8 = undefined;
+        const l = serializeArray(&buf, &arr);
+        const res, const len = try deserializeField([]const u8, buf[0..l]);
+        try std.testing.expectEqualSlices(u8, &arr, res);
+        try std.testing.expectEqual(l, len);
+    }
+    { // String
+        const str = "hello";
+        var buf: [128]u8 = undefined;
+        const l = serializeString(&buf, str);
+        const res, const len = try deserializeField([:0]const u8, buf[0..l]);
+        try std.testing.expectEqualSlices(u8, str, res);
+        try std.testing.expectEqual(l, len);
+    }
+    { // Optional String
+        const str = "world";
+        var buf: [128]u8 = undefined;
+        const l = serializeOptionalString(&buf, str);
+        const res, const len = try deserializeField(?[:0]const u8, buf[0..l]);
+        try std.testing.expect(res != null);
+        try std.testing.expectEqualSlices(u8, str, res.?);
+        try std.testing.expectEqual(l, len);
+    }
+    { // Optional Object
+        const obj: TestInterface = @enumFromInt(123);
+        const res, const len = try deserializeField(?TestInterface, std.mem.asBytes(&obj));
+        try std.testing.expect(res != null);
+        try std.testing.expectEqual(obj, res.?);
+        try std.testing.expectEqual(4, len);
+    }
+}
+
 fn deserializeInt(data: []const u8) DeserializeError!struct { i32, usize } {
     if (data.len < 4) return error.InvalidArguments;
     return .{ std.mem.bytesToValue(i32, data[0..4]), 4 };
