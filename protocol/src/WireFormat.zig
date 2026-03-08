@@ -50,6 +50,86 @@ pub const NewId = struct {
     }
 };
 
+/// Serialize a single message argument `arg` to `buffer`. Return the length
+/// of `arg` as serialized bytes.
+fn serializeArg(buffer: []u8, arg: anytype) usize {
+    const T = @TypeOf(arg);
+    return switch (@typeInfo(T)) {
+        .int => switch (T) {
+            i32 => serializeInt(buffer, arg),
+            u32 => serializeUint(buffer, arg),
+            else => @compileError("Invalid integer type"),
+        },
+        .@"struct" => switch (T) {
+            Fixed => serializeFixed(buffer, arg),
+            NewId => serializeNewId(buffer, arg),
+            else => serializeUint(buffer, @bitCast(arg)),
+        },
+        .@"enum" => |e| switch (e.tag_type) {
+            i32 => serializeInt(buffer, @intFromEnum(arg)),
+            u32 => serializeUint(buffer, @intFromEnum(arg)),
+            else => @compileError("Invalid enum tag type"),
+        },
+        .pointer => switch (T) {
+            []const u8 => serializeArray(buffer, arg),
+            [:0]const u8 => serializeString(buffer, arg),
+            else => @compileError("Invalid pointer type"),
+        },
+        .optional => |o| switch (o.child) {
+            [:0]const u8 => serializeOptionalString(buffer, arg),
+            else => serializeUint(buffer, arg),
+        },
+        else => @compileError(std.fmt.comptimePrint("Invalid `arg` type: {s}", .{@typeName(T)})),
+    };
+}
+
+test "WireFormat.serializeArg" {
+    var buf: [256]u8 = undefined;
+    // int
+    try std.testing.expectEqual(4, serializeArg(&buf, @as(i32, -42)));
+    try std.testing.expectEqual(-42, std.mem.bytesToValue(i32, buf[0..4]));
+    // uint
+    try std.testing.expectEqual(4, serializeArg(&buf, @as(u32, 42)));
+    try std.testing.expectEqual(42, std.mem.bytesToValue(u32, buf[0..4]));
+    // fixed
+    try std.testing.expectEqual(4, serializeArg(&buf, Fixed.from(1.5)));
+    try std.testing.expectApproxEqAbs(1.5, std.mem.bytesToValue(Fixed, buf[0..4]).to(f64), 0.01);
+    // new_id
+    const new_id = NewId.init(TestInterface, .v1, 123);
+    const n = serializeArg(&buf, new_id);
+    const len = std.mem.bytesToValue(u32, buf[0..4]);
+    try std.testing.expectEqual(TestInterface.interface.len + 1, len);
+    try std.testing.expectEqualSlices(u8, TestInterface.interface, buf[4..][0 .. len - 1]);
+    try std.testing.expectEqual(1, std.mem.bytesToValue(u32, buf[16..20]));
+    try std.testing.expectEqual(123, std.mem.bytesToValue(u32, buf[20..24]));
+    try std.testing.expectEqual(24, n);
+    // enum
+    try std.testing.expectEqual(4, serializeArg(&buf, TestInterface.Version.v2));
+    try std.testing.expectEqual(2, std.mem.bytesToValue(u32, buf[0..4]));
+    // array
+    const arr = [_]u8{ 10, 20, 30 };
+    const arr_ser_len = serializeArg(&buf, @as([]const u8, &arr));
+    try std.testing.expectEqual(3, std.mem.bytesToValue(u32, buf[0..4]));
+    try std.testing.expectEqualSlices(u8, &arr, buf[4..][0..3]);
+    try std.testing.expectEqual(8, arr_ser_len);
+    // string
+    const str = "hello";
+    const str_ser_len = serializeArg(&buf, @as([:0]const u8, str));
+    try std.testing.expectEqual(6, std.mem.bytesToValue(u32, buf[0..4]));
+    try std.testing.expectEqualSlices(u8, str, buf[4..][0..5]);
+    try std.testing.expectEqual(12, str_ser_len);
+    // optional string
+    const opt_str: ?[:0]const u8 = "world";
+    const opt_str_ser_len = serializeArg(&buf, opt_str);
+    try std.testing.expectEqual(6, std.mem.bytesToValue(u32, buf[0..4]));
+    try std.testing.expectEqual(12, opt_str_ser_len);
+    // null string
+    const null_str: ?[:0]const u8 = null;
+    const null_str_ser_len = serializeArg(&buf, null_str);
+    try std.testing.expectEqual(0, std.mem.bytesToValue(u32, buf[0..4]));
+    try std.testing.expectEqual(4, null_str_ser_len);
+}
+
 fn serializeInt(buffer: []u8, int: i32) usize {
     std.mem.bytesAsValue(i32, buffer[0..@sizeOf(i32)]).* = int;
     return @sizeOf(i32);
