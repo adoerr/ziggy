@@ -166,6 +166,23 @@ test "serializeNewId" {
     try std.testing.expectEqual(42, std.mem.bytesToValue(u32, buf[20..24]));
 }
 
+/// Serialize `array`, starting with 32-bit array size in bytes, followed by the
+/// array contents verbatim, and finally padding to a 32-bit boundary
+fn serializeArray(buffer: []u8, array: []const u8) usize {
+    const idx = serializeUint(buffer, @intCast(array.len));
+    @memcpy(buffer[idx..][0..array.len], array);
+    return idx + alignTo4(array.len);
+}
+
+test "WireFormat.serializeArray" {
+    const arr = [_]u8{ 0, 1, 2, 3, 4, 5, 6 };
+    var buf: [12]u8 = undefined;
+    try std.testing.expectEqual(buf.len, serializeArray(&buf, &arr));
+    const len = std.mem.bytesToValue(u32, buf[0..4]);
+    try std.testing.expectEqual(arr.len, len);
+    try std.testing.expectEqualSlices(u8, &arr, buf[4..][0..arr.len]);
+}
+
 /// Return the message size in bytes starting at the header (i.e. every message
 /// has at least a minimum size of 8).
 ///
