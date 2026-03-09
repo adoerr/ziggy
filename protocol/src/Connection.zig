@@ -86,6 +86,8 @@ const ObjectInterfaceMap = struct {
             .client => self.client,
             .server => self.server,
         };
+        // check if `object_id` resulted in an out-of-bounds index
+        if (idx >= interfaces.len) return error.InvalidId;
         return interfaces[idx] orelse error.InvalidId;
     }
 
@@ -126,12 +128,150 @@ const ObjectInterfaceMap = struct {
                 alloc.free(interfaces);
                 break :mem new_memory;
             };
-            interfaces.ptr = new_memory.ptr;
-            // number of current interface entries
-            const curr_len = interfaces.len;
-            interfaces.len = new_memory.len;
+
             // init new entries
-            for (curr_len..interfaces.len) |i| interfaces[i] = null;
+            for (interfaces.len..new_memory.len) |i| new_memory[i] = null;
+
+            switch (side) {
+                .client => self.client = new_memory,
+                .server => self.server = new_memory,
+            }
         }
     }
 };
+
+test "ObjectInterfaceMap - init/deinit" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var map = try ObjectInterfaceMap.init(alloc);
+    defer map.deinit(alloc);
+
+    // Initial state check
+    try testing.expectEqualStrings("wl_display", (try map.getInterface(1)));
+}
+
+test "ObjectInterfaceMap - add/get client" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var map = try ObjectInterfaceMap.init(alloc);
+    defer map.deinit(alloc);
+
+    // Test adding and retrieving client-side interfaces
+    const client_id: u32 = 2;
+    try map.add(alloc, client_id, "wl_registry");
+    try testing.expectEqualStrings("wl_registry", (try map.getInterface(client_id)));
+}
+
+test "ObjectInterfaceMap - add/get server" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var map = try ObjectInterfaceMap.init(alloc);
+    defer map.deinit(alloc);
+
+    // Test adding and retrieving server-side interfaces
+    const server_id: u32 = wire.server_min_id;
+    try map.add(alloc, server_id, "wl_output");
+    try testing.expectEqualStrings("wl_output", (try map.getInterface(server_id)));
+}
+
+test "ObjectInterfaceMap - duplicate add" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var map = try ObjectInterfaceMap.init(alloc);
+    defer map.deinit(alloc);
+
+    const client_id: u32 = 2;
+    try map.add(alloc, client_id, "wl_registry");
+    // Test duplicate add
+    try testing.expectError(error.ObjectAlreadyExists, map.add(alloc, client_id, "wl_shm"));
+}
+
+test "ObjectInterfaceMap - delete" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var map = try ObjectInterfaceMap.init(alloc);
+    defer map.deinit(alloc);
+
+    const client_id: u32 = 2;
+    try map.add(alloc, client_id, "wl_registry");
+
+    // Test delete
+    try map.delete(client_id);
+    try testing.expectError(error.InvalidId, map.getInterface(client_id));
+    // Test delete invalid ID (already deleted)
+    try testing.expectError(error.InvalidId, map.delete(client_id));
+}
+
+test "ObjectInterfaceMap - invalid access" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var map = try ObjectInterfaceMap.init(alloc);
+    defer map.deinit(alloc);
+
+    // Test invalid ID retrieval
+    try testing.expectError(error.InvalidId, map.getInterface(99999));
+    // Invalid ID (0 is invalid)
+    try testing.expectError(error.InvalidId, map.getInterface(0));
+}
+
+test "ObjectInterfaceMap - capacity expansion" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var map = try ObjectInterfaceMap.init(alloc);
+    defer map.deinit(alloc);
+
+    // Test capacity expansion. The initial client capacity is 16. We add enough items to force a resize.
+    var i: u32 = 3;
+    while (i <= 33) : (i += 1) {
+        try map.add(alloc, i, "test_interface");
+    }
+    try testing.expectEqualStrings("test_interface", (try map.getInterface(33)));
+}
+
+test "ObjectInterfaceMap - getSide" {
+    const testing = std.testing;
+
+    // Test client side range
+    try testing.expectEqual(ProtocolSide.client, try ObjectInterfaceMap.getSide(1));
+    try testing.expectEqual(ProtocolSide.client, try ObjectInterfaceMap.getSide(wire.client_min_id));
+    try testing.expectEqual(ProtocolSide.client, try ObjectInterfaceMap.getSide(wire.client_max_id));
+    // Test server side range
+    try testing.expectEqual(ProtocolSide.server, try ObjectInterfaceMap.getSide(wire.server_min_id));
+    try testing.expectEqual(ProtocolSide.server, try ObjectInterfaceMap.getSide(wire.server_max_id));
+    // Test invalid IDs
+    try testing.expectError(error.InvalidId, ObjectInterfaceMap.getSide(0));
+}
+
+test "ObjectInterfaceMap - getIndex" {
+    const testing = std.testing;
+
+    // Test client side indexing
+    try testing.expectEqual(@as(usize, 0), ObjectInterfaceMap.getIndex(1, .client));
+    try testing.expectEqual(@as(usize, 1), ObjectInterfaceMap.getIndex(2, .client));
+    // Test server side indexing
+    try testing.expectEqual(@as(usize, 0), ObjectInterfaceMap.getIndex(wire.server_min_id, .server));
+    try testing.expectEqual(@as(usize, 1), ObjectInterfaceMap.getIndex(wire.server_min_id + 1, .server));
+}
+
+test "ObjectInterfaceMap - ensureCapacity" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    var map = try ObjectInterfaceMap.init(alloc);
+    defer map.deinit(alloc);
+
+    // Initial capacity is 16 for client. Index 16 is the 17th element, requiring resizing. Calling private ensureCapacity directly
+    try map.ensureCapacity(alloc, 16, .client);
+    // Check if capacity increased (not directly observable without inspecting private fields, but the slice length should have increased)
+    try testing.expect(map.client.len > 16);
+    // Trying to ensure invalid capacity (index > len) without contiguous growth logic? The ensureCapacity implementations logic checks,
+    // `if (index > interfaces.len) return error.InvalidId;` It only allows growing by 1 step at the boundary `(index == len)`.
+    try testing.expectError(error.InvalidId, map.ensureCapacity(alloc, 100, .client));
+}
