@@ -42,6 +42,40 @@ const ObjectInterfaceMap = struct {
         alloc.free(self.server);
     }
 
+    /// Add a mapping from `object_id` to `interface`
+    pub fn add(self: *ObjectInterfaceMap, alloc: std.mem.Allocator, object_id: u32, interface: [:0]const u8) error{ OutOfMemory, InvalidId, ObjectAlreadyExists }!void {
+        const side = try getSide(object_id);
+        const idx = getIndex(object_id, side);
+        try self.ensureCapacity(alloc, idx, side);
+
+        const interfaces = switch (side) {
+            .client => self.client,
+            .server => self.server,
+        };
+
+        if (interfaces[idx] != null) {
+            @branchHint(.unlikely);
+            return error.ObjectAlreadyExists;
+        }
+        interfaces[idx] = interface;
+    }
+
+    pub fn delete(self: *ObjectInterfaceMap, object_id: u32) error{InvalidId}!void {
+        const side = try getSide(object_id);
+        const idx = getIndex(object_id, side);
+        var interfaces = switch (side) {
+            .client => self.client,
+            .server => self.server,
+        };
+
+        if (idx >= interfaces.len or interfaces[idx] == null) {
+            @branchHint(.unlikely);
+            log.err("Delete mapping: invalid object ID: {d}", .{object_id});
+            return error.InvalidId;
+        }
+        interfaces[idx] = null;
+    }
+
     /// Return the protocol side based on `object_id`
     fn getSide(object_id: u32) error{InvalidId}!ProtocolSide {
         return switch (object_id) {
