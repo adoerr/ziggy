@@ -33,6 +33,7 @@ const ObjectInterfaceMap = struct {
 
         const server_buf = try alloc.alloc(?[:0]const u8, 4);
         errdefer alloc.free(server_buf);
+        @memset(server_buf, null);
 
         return ObjectInterfaceMap{ .client = client_buf, .server = server_buf };
     }
@@ -60,6 +61,7 @@ const ObjectInterfaceMap = struct {
         interfaces[idx] = interface;
     }
 
+    /// Delete interface mapping for `object_id`
     pub fn delete(self: *ObjectInterfaceMap, object_id: u32) error{InvalidId}!void {
         const side = try getSide(object_id);
         const idx = getIndex(object_id, side);
@@ -70,10 +72,21 @@ const ObjectInterfaceMap = struct {
 
         if (idx >= interfaces.len or interfaces[idx] == null) {
             @branchHint(.unlikely);
-            log.err("Delete mapping: invalid object ID: {d}", .{object_id});
+            log.debug("Delete mapping: invalid object ID: {d}", .{object_id});
             return error.InvalidId;
         }
         interfaces[idx] = null;
+    }
+
+    /// Return interface which `object_id` has been mapped to
+    pub fn getInterface(self: *ObjectInterfaceMap, object_id: u32) error{InvalidId}![:0]const u8 {
+        const side = try getSide(object_id);
+        const idx = getIndex(object_id, side);
+        var interfaces = switch (side) {
+            .client => self.client,
+            .server => self.server,
+        };
+        return interfaces[idx] orelse error.InvalidId;
     }
 
     /// Return the protocol side based on `object_id`
@@ -89,7 +102,7 @@ const ObjectInterfaceMap = struct {
     fn getIndex(object_id: u32, side: ProtocolSide) usize {
         return switch (side) {
             .client => object_id - 1,
-            .server => object_id = wire.server_min_id,
+            .server => object_id - wire.server_min_id,
         };
     }
 
