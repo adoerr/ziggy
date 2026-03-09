@@ -7,7 +7,7 @@ const builtin = @import("builtin");
 
 const Fixed = @import("fixed.zig").Fixed;
 
-const log = std.log.scoped(.WireFormat);
+const log = std.log.scoped(.wayland_WireFormat);
 
 // Max values match `libwayland`
 pub const max_msg_size = 4096;
