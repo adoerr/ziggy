@@ -54,26 +54,31 @@ fn Buffer(comptime length: usize, comptime T: type) type {
 
         pub const PutError = error{OutOfSpace};
 
+        /// Append an item to the buffer. Return `error.OutOfSpace` if the buffer is full.
         pub fn put(self: *Self, item: T) PutError!void {
             if (self.end + 1 >= self.data.len) return error.OutOfSpace;
             self.data[self.end] = item;
             self.end += 1;
         }
 
+        /// Append multiple items to the buffer. Return `error.OutOfSpace` if the buffer doesn't have enough space.
         pub fn putMany(self: *Self, data: []const T) PutError!void {
             if (self.end + data.len >= self.data.len) return error.OutOfSpace;
             @memcpy(self.data[self.end..][0..data.len], data);
             self.end += data.len;
         }
 
-        pub fn peek(self: *Self, index: usize) ?[]const T {
-            if (index > self.end - self.start) return null;
-            return self.data[self.start..][0..index];
+        /// Return a slice of the first `n` items from the buffer without removing them. Return `null` if `n` is
+        /// larger than the number of available items.
+        pub fn peek(self: *Self, n: usize) ?[]const T {
+            if (n > self.end - self.start) return null;
+            return self.data[self.start..][0..n];
         }
 
         pub const SkipError = error{SkipTooLong};
 
-        // Skip `n` items
+        /// Skip `n` items from the start of the buffer. Return `error.SkipTooLong` if `n` is larger than the number
+        /// of available items.
         pub fn skip(self: *Self, n: usize) SkipError!void {
             if (n > self.end - self.start) return error.SkipTooLong;
             self.start += n;
@@ -83,6 +88,7 @@ fn Buffer(comptime length: usize, comptime T: type) type {
             }
         }
 
+        /// Shift the valid items to the beginning of the underlying array to reclaim space.
         pub fn shiftToStart(self: *Self) void {
             if (self.start == 0) return;
             const len = self.end - self.start;
@@ -91,10 +97,117 @@ fn Buffer(comptime length: usize, comptime T: type) type {
             self.end = len;
         }
 
+        /// Return a slice of the valid items in the buffer.
         pub fn slice(self: *Self) []T {
             return self.data[self.start..self.end];
         }
     };
+}
+
+test "Buffer - basic usage" {
+    const testing = std.testing;
+    const Buf = Buffer(10, u8);
+    var buf = Buf{};
+
+    try testing.expectEqual(@as(usize, 0), buf.start);
+    try testing.expectEqual(@as(usize, 0), buf.end);
+    try testing.expectEqual(@as(usize, 0), buf.slice().len);
+
+    try buf.put(1);
+    try buf.put(2);
+    try buf.put(3);
+
+    const s = buf.slice();
+    try testing.expectEqual(@as(usize, 3), s.len);
+    try testing.expectEqual(@as(u8, 1), s[0]);
+    try testing.expectEqual(@as(u8, 2), s[1]);
+    try testing.expectEqual(@as(u8, 3), s[2]);
+}
+
+test "Buffer - putMany" {
+    const testing = std.testing;
+    const Buf = Buffer(10, u8);
+    var buf = Buf{};
+
+    const data = [_]u8{ 1, 2, 3, 4, 5 };
+    try buf.putMany(&data);
+
+    try testing.expectEqual(@as(usize, 5), buf.slice().len);
+    try testing.expectEqualSlices(u8, &data, buf.slice());
+
+    // Test overflow
+    const overflow = [_]u8{ 6, 7, 8, 9, 10, 11 };
+    try testing.expectError(Buf.PutError.OutOfSpace, buf.putMany(&overflow));
+}
+
+test "Buffer - peek" {
+    const testing = std.testing;
+    const Buf = Buffer(10, u8);
+    var buf = Buf{};
+
+    try buf.put(10);
+    try buf.put(20);
+
+    const p1 = buf.peek(1);
+    try testing.expect(p1 != null);
+    try testing.expectEqual(@as(u8, 10), p1.?[0]);
+    try testing.expectEqual(@as(usize, 1), p1.?.len);
+
+    const p2 = buf.peek(2);
+    try testing.expect(p2 != null);
+    try testing.expectEqualSlices(u8, &[_]u8{ 10, 20 }, p2.?);
+
+    const p3 = buf.peek(3);
+    try testing.expect(p3 == null);
+}
+
+test "Buffer - skip and shiftToStart" {
+    const testing = std.testing;
+    const Buf = Buffer(11, u8);
+    var buf = Buf{};
+
+    try buf.putMany(&[_]u8{ 1, 2, 3, 4, 5 });
+
+    try buf.skip(2);
+    try testing.expectEqual(@as(usize, 2), buf.start);
+    try testing.expectEqual(@as(usize, 5), buf.end);
+    try testing.expectEqualSlices(u8, &[_]u8{ 3, 4, 5 }, buf.slice());
+
+    buf.shiftToStart();
+    try testing.expectEqual(@as(usize, 0), buf.start);
+    try testing.expectEqual(@as(usize, 3), buf.end);
+    try testing.expectEqualSlices(u8, &[_]u8{ 3, 4, 5 }, buf.slice());
+
+    // Fill up the rest with 7 items. Buffer size is 11 (max 10). We have 3 items. 10 - 3 = 7.
+    try buf.putMany(&[_]u8{ 6, 7, 8, 9, 10, 11, 12 });
+    try testing.expectEqual(@as(usize, 10), buf.slice().len);
+    try testing.expectEqualSlices(u8, &[_]u8{ 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }, buf.slice());
+}
+
+test "Buffer - skip fully" {
+    const testing = std.testing;
+    const Buf = Buffer(5, u8);
+    var buf = Buf{};
+
+    try buf.putMany(&[_]u8{ 1, 2, 3 });
+    try buf.skip(3); // Skip all
+
+    // Should reset to 0,0
+    try testing.expectEqual(@as(usize, 0), buf.start);
+    try testing.expectEqual(@as(usize, 0), buf.end);
+    try testing.expectEqual(@as(usize, 0), buf.slice().len);
+}
+
+test "Buffer - errors" {
+    const testing = std.testing;
+    const Buf = Buffer(3, u8);
+    var buf = Buf{};
+
+    try buf.put(1);
+    try buf.put(2);
+    try testing.expectError(Buf.PutError.OutOfSpace, buf.put(3));
+
+    try testing.expectError(Buf.SkipError.SkipTooLong, buf.skip(3));
 }
 
 /// A map of object IDs to wayland interfaces
