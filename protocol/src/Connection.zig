@@ -13,6 +13,17 @@ stream: std.Io.net.Stream,
 io: std.Io,
 alloc: std.mem.Allocator,
 map: ObjectInterfaceMap,
+// regular protocol messages
+data_in: Buffer(wire.max_msg_size, u8) = .{},
+data_out: Buffer(wire.max_msg_size, u8) = .{},
+// (file) descriptor transfer messages
+fd_in: Buffer(wire.max_msg_args, std.posix.fd_t),
+fd_out: Buffer(wire.max_msg_args, std.posix.fd_t),
+// object id management
+next_obj_id: u32 = wire.client_min_id,
+obj_id_free_list: std.ArrayList(u32) = .empty,
+min_obj_id: u32 = wire.client_min_id,
+max_obj_id: u32 = wire.client_max_id,
 
 pub const InitError = std.Io.net.UnixAddress.ConnectError || error{OutOfMemory};
 
@@ -28,6 +39,56 @@ pub fn init(io: std.Io, alloc: std.mem.Allocator, address: Address) !Connection 
         .alloc = alloc,
         .map = map,
     };
+}
+
+pub fn deinit(self: *Connection) void {
+    for (self.fd_out.slice()) |fd| _ = std.posix.system.close(fd);
+    for (self.fd_in.slice()) |fd| _ = std.posix.system.close(fd);
+    self.obj_id_free_list.deinit(self.alloc);
+    self.map.deinit(self.alloc);
+    self.stream.close(self.io);
+    self.* = undefined;
+}
+
+const DeserializeMessageError = wire.DeserializeError || error{ UnsupportedInterface, InvalidOpcode };
+
+fn deserializeMessage(self: *Connection, comptime Message: type, header: wire.Header, interface: [:0]const u8, body: []const u8) DeserializeMessageError!?Message {
+    @setEvalBranchQuota(10000);
+
+    const msg = @typeInfo(Message).@"union";
+
+    inline for (msg.fields) |field| if (std.mem.eql(u8, field.name, interface)) {
+        const sub_fields = @typeInfo(field.type).@"union".fields;
+        switch (header.opcode) {
+            0...sub_fields.len - 1 => |i| {
+                const sub_field = sub_fields[i];
+
+                const fd_count = countFds(sub_field.type);
+                const fds = self.fd_in.peek(fd_count) orelse return null;
+
+                self.data_in.discard(header.length) catch unreachable;
+                self.fd_in.discard(fd_count) catch unreachable;
+
+                var message = try wire.deserializeMessage(sub_field.type, body, fds);
+                const object_self_field = std.meta.fields(@TypeOf(message))[0];
+                @field(message, object_self_field.name) = @enumFromInt(header.object);
+
+                const interface_message = @unionInit(field.type, sub_field.name, message);
+                return @unionInit(Message, field.name, interface_message);
+            },
+            else => return error.InvalidOpcode,
+        }
+    };
+
+    return error.UnsupportedInterface;
+}
+
+fn countFds(comptime T: type) usize {
+    comptime var count: usize = 0;
+    inline for (T._signature) |byte| if (byte == 'd') {
+        count += 1;
+    };
+    return count;
 }
 
 fn connect(io: std.Io, address: Address) std.Io.net.UnixAddress.ConnectError!std.Io.net.Stream {
