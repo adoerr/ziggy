@@ -1,10 +1,34 @@
 const std = @import("std");
+
 const Address = @import("Address.zig");
 const ProtocolSide = @import("protocol.zig").ProtocolSide;
 const cmsg = @import("ctrl_msg.zig");
 const wire = @import("WireFormat.zig");
 
 const log = std.log.scoped(.wayland_connection);
+
+const Connection = @This();
+
+stream: std.Io.net.Stream,
+io: std.Io,
+alloc: std.mem.Allocator,
+map: ObjectInterfaceMap,
+
+pub const InitError = std.Io.net.UnixAddress.ConnectError || error{OutOfMemory};
+
+pub fn init(io: std.Io, alloc: std.mem.Allocator, address: Address) !Connection {
+    var map: ObjectInterfaceMap = try .init(alloc);
+    errdefer map.deinit(alloc);
+
+    const stream = try connect(io, address);
+
+    return Connection{
+        .stream = stream,
+        .io = io,
+        .alloc = alloc,
+        .map = map,
+    };
+}
 
 fn connect(io: std.Io, address: Address) std.Io.net.UnixAddress.ConnectError!std.Io.net.Stream {
     return switch (address.info) {
@@ -131,7 +155,7 @@ const ObjectInterfaceMap = struct {
 
             // init new entries
             for (interfaces.len..new_memory.len) |i| new_memory[i] = null;
-
+            // use the new allocation
             switch (side) {
                 .client => self.client = new_memory,
                 .server => self.server = new_memory,
