@@ -6,6 +6,7 @@
         "FIRSTHDR",
         "libwayland",
         "memcpy",
+        "memmove",
         "memset",
         "msghdr",
         "NXTHDR",

@@ -43,6 +43,60 @@ fn connect(io: std.Io, address: Address) std.Io.net.UnixAddress.ConnectError!std
     };
 }
 
+/// Typed buffer for Wayland protocol messages
+fn Buffer(comptime length: usize, comptime T: type) type {
+    return struct {
+        const Self = @This();
+
+        data: [length]T = undefined,
+        start: usize = 0,
+        end: usize = 0,
+
+        pub const PutError = error{OutOfSpace};
+
+        pub fn put(self: *Self, item: T) PutError!void {
+            if (self.end + 1 >= self.data.len) return error.OutOfSpace;
+            self.data[self.end] = item;
+            self.end += 1;
+        }
+
+        pub fn putMany(self: *Self, data: []const T) PutError!void {
+            if (self.end + data.len >= self.data.len) return error.OutOfSpace;
+            @memcpy(self.data[self.end..][0..data.len], data);
+            self.end += data.len;
+        }
+
+        pub fn peek(self: *Self, index: usize) ?[]const T {
+            if (index > self.end - self.start) return null;
+            return self.data[self.start..][0..index];
+        }
+
+        pub const SkipError = error{SkipTooLong};
+
+        // Skip `n` items
+        pub fn skip(self: *Self, n: usize) SkipError!void {
+            if (n > self.end - self.start) return error.SkipTooLong;
+            self.start += n;
+            if (self.start == self.end) {
+                self.start = 0;
+                self.end = 0;
+            }
+        }
+
+        pub fn shiftToStart(self: *Self) void {
+            if (self.start == 0) return;
+            const len = self.end - self.start;
+            @memmove(self.data[0..len], self.data[self.start..self.end]);
+            self.start = 0;
+            self.end = len;
+        }
+
+        pub fn slice(self: *Self) []T {
+            return self.data[self.start..self.end];
+        }
+    };
+}
+
 /// A map of object IDs to wayland interfaces
 const ObjectInterfaceMap = struct {
     client: []?[:0]const u8,
