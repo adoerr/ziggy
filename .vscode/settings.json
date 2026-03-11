@@ -4,13 +4,16 @@
         "cmsg",
         "controllen",
         "FIRSTHDR",
+        "ftruncate",
         "libwayland",
         "memcpy",
+        "memfd",
         "memmove",
         "memset",
         "msghdr",
         "NXTHDR",
         "posix",
+        "prng",
         "wayland"
     ]
 }
