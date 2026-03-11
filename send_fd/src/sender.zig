@@ -31,6 +31,31 @@ pub fn main(init: std.process.Init) !void {
     const stream = try addr.connect(init.io);
     defer stream.close(init.io);
     log.info("Connected to Server ...", .{});
+
+    // we need space for one file descriptor
+    var control: [cmsg.space(1)]u8 = undefined;
+    std.mem.bytesAsValue(cmsg.Header, control[0..@sizeOf(cmsg.Header)]).* = .{ .cmsg_len = cmsg.length(1) };
+    // copy file descriptor into control buffer
+    const data = std.mem.bytesAsSlice(std.posix.fd_t, control[@sizeOf(cmsg.Header)..][0..@sizeOf(std.posix.fd_t)]);
+    const fds = [_]i32{shm_fd};
+    @memcpy(data, &fds);
+    // we only use ancillary data, so crate some dummy data
+    const dummy_buf: []const u8 = "Here comes the file descriptor";
+    var iov = [1]std.posix.iovec_const{.{ .base = dummy_buf.ptr, .len = dummy_buf.len }};
+
+    const msg_hdr = std.posix.msghdr_const{
+        .name = null,
+        .namelen = 0,
+        .iov = &iov,
+        .iovlen = 1,
+        .control = &control,
+        .controllen = control.len,
+        .flags = 0,
+    };
+
+    const bytes_send = std.posix.system.sendmsg(stream.socket.handle, &msg_hdr, 0);
+    std.debug.assert(bytes_send == dummy_buf.len);
+    log.info("Send `{d}` bytes", .{bytes_send});
 }
 
 /// Fill `buf` with random characters.

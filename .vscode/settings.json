@@ -5,6 +5,8 @@
         "controllen",
         "FIRSTHDR",
         "ftruncate",
+        "iovec",
+        "iovlen",
         "libwayland",
         "memcpy",
         "memfd",
@@ -13,9 +15,11 @@
         "mmap",
         "msghdr",
         "munmap",
+        "namelen",
         "NXTHDR",
         "posix",
         "prng",
+        "sendmsg",
         "wayland"
     ]
 }
