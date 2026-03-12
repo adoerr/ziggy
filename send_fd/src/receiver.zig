@@ -44,10 +44,13 @@ pub fn main(init: std.process.Init) !void {
         std.process.exit(1);
     }
 
+    // get shared memory file stats
+    const file = std.Io.File{ .handle = shm_fd, .flags = .{ .nonblocking = true } };
+    const shm_stat = try file.stat(init.io);
     // map the shared memory fd and read the message
     const shm_opt: std.posix.PROT = .{ .READ = true, .WRITE = true };
     const shm_flags: std.posix.MAP = .{ .TYPE = .SHARED };
-    const shm_ptr = try std.posix.mmap(null, 50, shm_opt, shm_flags, shm_fd, 0);
+    const shm_ptr = try std.posix.mmap(null, shm_stat.size, shm_opt, shm_flags, shm_fd, 0);
     defer std.posix.munmap(shm_ptr);
     defer _ = std.posix.system.close(shm_fd);
     log.info("Read `{s}` from shared memory (fd={d})", .{ shm_ptr, shm_fd });

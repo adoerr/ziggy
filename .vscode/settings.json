@@ -17,6 +17,7 @@
         "msghdr",
         "munmap",
         "namelen",
+        "nonblocking",
         "NXTHDR",
         "posix",
         "prng",
