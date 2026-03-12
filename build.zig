@@ -12,24 +12,31 @@ pub fn build(b: *std.Build) void {
     build_http_step.dependOn(&http_server.step);
     b.getInstallStep().dependOn(&http_server.step);
 
-    // build the `ladder` programm
+    // build `ladder`
     const ladder = b.addSystemCommand(&.{ "zig", "build" });
     ladder.cwd = b.path("ladder");
-    const build_ladder_step = b.step("ladder", "Build the `ladder` programm");
+    const build_ladder_step = b.step("ladder", "Build the `ladder` program");
     build_ladder_step.dependOn(&ladder.step);
     b.getInstallStep().dependOn(&ladder.step);
 
-    // build the `ps` programm
+    // build `ps`
     const ps = b.addSystemCommand(&.{ "zig", "build" });
     ps.cwd = b.path("ps");
     const build_ps_step = b.step("ps", "Build the PostScript interpreter");
     build_ps_step.dependOn(&ps.step);
     b.getInstallStep().dependOn(&ps.step);
 
-    // build the `gui` programm
+    // build `gui`
     const gui = b.addSystemCommand(&.{ "zig", "build" });
     gui.cwd = b.path("gui");
-    const build_gui_step = b.step("gui", "Build the PostScript interpreter");
+    const build_gui_step = b.step("gui", "Build the GUI");
     build_gui_step.dependOn(&gui.step);
     b.getInstallStep().dependOn(&gui.step);
+
+    // build `send_fd`
+    const send_fd = b.addSystemCommand(&.{ "zig", "build" });
+    send_fd.cwd = b.path("send_fd");
+    const build_send_fd_step = b.step("send_fd", "Build the send file descriptor example");
+    build_send_fd_step.dependOn(&send_fd.step);
+    b.getInstallStep().dependOn(&send_fd.step);
 }
