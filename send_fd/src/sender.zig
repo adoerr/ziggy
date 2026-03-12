@@ -55,7 +55,7 @@ pub fn main(init: std.process.Init) !void {
 
     const bytes_send = std.posix.system.sendmsg(stream.socket.handle, &msg_hdr, 0);
     std.debug.assert(bytes_send == dummy_buf.len);
-    log.info("Send `{d}` bytes", .{bytes_send});
+    log.info("Send `{d}` bytes `{s}`", .{ bytes_send, dummy_buf[0..bytes_send] });
 }
 
 /// Fill `buf` with random characters.

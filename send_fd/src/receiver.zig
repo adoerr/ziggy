@@ -31,5 +31,24 @@ pub fn main(init: std.process.Init) !void {
     };
 
     const num = std.posix.system.recvmsg(stream.socket.handle, &msg_hdr, std.posix.system.MSG.DONTWAIT);
-    log.info("Received: `{d}` bytes", .{num});
+    log.info("Received: `{d}` bytes `{s}`", .{ num, data_buf[0..num] });
+
+    // we expect only one control message with the shared memory fd
+    var shm_fd: std.posix.fd_t = undefined;
+    if (cmsg.firstHeader(&msg_hdr)) |header| {
+        const data = cmsg.data(header);
+        const fds = std.mem.bytesAsSlice(std.posix.fd_t, data);
+        shm_fd = fds[0];
+    } else {
+        log.err("Missing control msg header", .{});
+        std.process.exit(1);
+    }
+
+    // map the shared memory fd and read the message
+    const shm_opt: std.posix.PROT = .{ .READ = true, .WRITE = true };
+    const shm_flags: std.posix.MAP = .{ .TYPE = .SHARED };
+    const shm_ptr = try std.posix.mmap(null, 50, shm_opt, shm_flags, shm_fd, 0);
+    defer std.posix.munmap(shm_ptr);
+    defer _ = std.posix.system.close(shm_fd);
+    log.info("Read `{s}` from shared memory (fd={d})", .{ shm_ptr, shm_fd });
 }
