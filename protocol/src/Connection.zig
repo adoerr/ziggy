@@ -50,6 +50,30 @@ pub fn deinit(self: *Connection) void {
     self.* = undefined;
 }
 
+pub const SendError = wire.SerializeError || FlushError || PutFdsError;
+
+pub fn sendMessage(self: *Connection, sender_id: u32, comptime len: usize, comptime opcode: u16, args: anytype, fds: []const std.posix.fd_t) SendError!void {
+    var buf: [len]u8 = undefined;
+    const bytes_written = try wire.serializeMessage(&buf, sender_id, opcode, args);
+
+    self.data_out.putMany(buf[0..bytes_written]) catch {
+        @branchHint(.unlikely);
+        // not enough space, flush buffers first
+        try self.flush();
+        try self.data_out.putMany(buf[0..bytes_written]);
+    };
+
+    self.putFds(fds) catch |err| switch (err) {
+        error.OutOfSpace => {
+            @branchHint(.unlikely);
+            // not enough space, flush fds first
+            try self.flush();
+            try self.putFds(fds);
+        },
+        else => |e| return e,
+    };
+}
+
 pub const FlushError = error{ ConnectionClosed, OutOfMemory, Unexpected };
 
 /// Flushes the connection's outgoing buffer to the underlying stream.
@@ -85,8 +109,9 @@ pub fn flush(self: *Connection) FlushError!void {
 
     const bytes_sent: usize = while (true) {
         const rc = std.posix.system.sendmsg(self.stream.socket.handle, &msg_hdr, 0);
-        // error handling, `EPIPE` and `ECONNRESET` are ignored in order to allow clients to handle server disconnects.
+        // error handling,
         switch (std.posix.errno(rc)) {
+            //`EPIPE` and `ECONNRESET` are ignored in order to allow clients to handle server disconnects.
             .SUCCESS, .PIPE, .CONNRESET => break @intCast(rc),
             .NOBUFS, .NOMEM => return error.OutOfMemory,
             .AGAIN => unreachable,
@@ -121,6 +146,19 @@ pub fn flush(self: *Connection) FlushError!void {
     self.data_out.end = 0;
     self.fd_out.start = 0;
     self.fd_out.end = 0;
+}
+
+const PutFdsError = error{ OutOfSpace, Unexpected };
+
+fn putFds(self: *Connection, fds: []const std.posix.fd_t) PutFdsError!void {
+    if (self.fd_out.end + fds.len >= self.fd_out.data.len) return error.OutOfSpace;
+
+    for (fds) |fd| {
+        const new_fd = std.posix.system.dup(fd);
+        if (std.posix.errno(new_fd) != .SUCCESS) return error.Unexpected;
+        // we checked for space at the beginning
+        self.fd_out.put(@intCast(new_fd)) catch unreachable;
+    }
 }
 
 const DeserializeMessageError = wire.DeserializeError || error{ UnsupportedInterface, InvalidOpcode };
