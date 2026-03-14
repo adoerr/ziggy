@@ -50,6 +50,79 @@ pub fn deinit(self: *Connection) void {
     self.* = undefined;
 }
 
+pub const FlushError = error{ ConnectionClosed, OutOfMemory, Unexpected };
+
+/// Flushes the connection's outgoing buffer to the underlying stream.
+///
+/// This function sends any buffered data and file descriptors to the server. If the buffer is empty,
+/// this function does nothing.
+///
+/// If the send operation returns `0`, `error.ConnectionClosed` is returned.
+pub fn flush(self: *Connection) FlushError!void {
+    // nothing to flush
+    if (self.data_out.end == 0) return;
+
+    // output data with protocol messages
+    const data = self.data_out.slice();
+    var iov = [1]std.posix.iovec_const{.{ .base = data.ptr, .len = data.len }};
+    // ancillary data object (aka control information) with shared memory file descriptors
+    const fds = self.fd_out.slice();
+    var ctrl: [cmsg.space(wire.max_msg_args)]u8 = undefined;
+    std.mem.bytesAsValue(cmsg.Header, ctrl[0..@sizeOf(cmsg.Header)]).* = .{ .len = cmsg.length(fds.len) };
+    // copy file descriptors into control information after the header
+    const dest = std.mem.bytesAsSlice(std.posix.fd_t, ctrl[@sizeOf(cmsg.Header)..][0..(fds.len * @sizeOf(std.posix.fd_t))]);
+    @memcpy(dest, fds);
+
+    const msg_hdr = std.posix.msghdr_const{
+        .name = null,
+        .namelen = 0,
+        .iov = &iov,
+        .iovlen = iov.len,
+        .control = &ctrl,
+        .controllen = @intCast(cmsg.length(fds.len)),
+        .flags = 0,
+    };
+
+    const bytes_sent: usize = while (true) {
+        const rc = std.posix.system.sendmsg(self.stream.socket.handle, &msg_hdr, 0);
+        // error handling, `EPIPE` and `ECONNRESET` are ignored in order to allow clients to handle server disconnects.
+        switch (std.posix.errno(rc)) {
+            .SUCCESS, .PIPE, .CONNRESET => break @intCast(rc),
+            .NOBUFS, .NOMEM => return error.OutOfMemory,
+            .AGAIN => unreachable,
+            .AFNOSUPPORT => unreachable,
+            .BADF => unreachable,
+            // retry in case send message sys call got interrupted
+            .INTR => continue,
+            .INVAL => unreachable,
+            .MSGSIZE => unreachable,
+            .NOTCONN => unreachable,
+            .NOTSOCK => unreachable,
+            .OPNOTSUPP => unreachable,
+            .IO => unreachable,
+            .LOOP => unreachable,
+            .NAMETOOLONG => unreachable,
+            .NOENT => unreachable,
+            .NOTDIR => unreachable,
+            .ACCES => unreachable,
+            .DESTADDRREQ => unreachable,
+            .HOSTUNREACH => unreachable,
+            .ISCONN => unreachable,
+            .NETDOWN => unreachable,
+            .NETUNREACH => unreachable,
+            else => |err| return std.posix.unexpectedErrno(err),
+        }
+    };
+
+    if (bytes_sent == 0) return error.ConnectionClosed;
+
+    for (fds) |fd| _ = std.posix.system.close(fd);
+    self.data_out.start = 0;
+    self.data_out.end = 0;
+    self.fd_out.start = 0;
+    self.fd_out.end = 0;
+}
+
 const DeserializeMessageError = wire.DeserializeError || error{ UnsupportedInterface, InvalidOpcode };
 
 fn deserializeMessage(self: *Connection, comptime Message: type, header: wire.Header, interface: [:0]const u8, body: []const u8) DeserializeMessageError!?Message {
