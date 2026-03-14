@@ -161,6 +161,74 @@ fn putFds(self: *Connection, fds: []const std.posix.fd_t) PutFdsError!void {
     }
 }
 
+fn peekHeader(self: *const Connection) ?wire.Header {
+    const bytes = self.data_in.peek(@sizeOf(wire.Header)) orelse return null;
+    return std.mem.bytesToValue(wire.Header, bytes);
+}
+
+const ReadIncomingError = std.posix.PollError || error{ ConnectionClosed, Timeout, OutOfMemory, OutOfSpace };
+
+fn readIncoming(self: *Connection, deadline: ?std.Io.Clock.Timestamp) ReadIncomingError!void {
+    self.data_in.shiftToStart();
+    self.fd_in.shiftToStart();
+
+    // wait indefinitely until an event occurs
+    const indefinitely: i32 = -1;
+    const timeout: i32 = if (deadline) |d| ms: {
+        const remaining = d.durationFromNow(self.io);
+        break :ms if (remaining.raw.nanoseconds <= 0) 0 else @intCast(remaining.raw.toMilliseconds());
+    } else indefinitely;
+
+    var pfd = [1]std.posix.pollfd{.{ .fd = self.stream.socket.handle, .events = std.posix.POLL.IN, .revents = 0 }};
+    if (try std.posix.poll(&pfd, timeout) == 0) return error.Timeout;
+
+    const data = self.data_in.data[self.data_in.end..];
+    var iov = [1]std.posix.iovec{.{ .base = data.ptr, .len = data.len }};
+    var ctrl: [cmsg.space(wire.max_msg_args)]u8 align(@alignOf(cmsg.Header)) = undefined;
+
+    var msg_hdr = std.posix.msghdr{
+        .name = null,
+        .namelen = 0,
+        .iov = &iov,
+        .iovlen = iov.len,
+        .control = &ctrl,
+        .controllen = ctrl.len,
+        .flags = 0,
+    };
+
+    const bytes_read = while (true) {
+        const rc = std.posix.system.recvmsg(self.stream.socket.handle, &msg_hdr, std.posix.system.MSG.DONTWAIT);
+        switch (std.posix.errno(rc)) {
+            .SUCCESS => break @as(usize, @intCast(rc)),
+            .INTR => continue,
+            .AGAIN => continue,
+            .INTR => continue,
+            .CONNRESET, .PIPE => return error.ConnectionClosed,
+            .TIMEDOUT => return error.Timeout,
+            .NOBUFS, .NOMEM => return error.OutOfMemory,
+            .BADF => unreachable,
+            .INVAL => unreachable,
+            .MSGSIZE => unreachable,
+            .NOTCONN => unreachable,
+            .NOTSOCK => unreachable,
+            .OPNOTSUPP => unreachable,
+            .IO => unreachable,
+            else => |err| return std.posix.unexpectedErrno(err),
+        }
+    };
+
+    if (bytes_read == 0) return error.ConnectionClosed;
+
+    self.data_in.end += bytes_read;
+    var header = cmsg.firstHeader(&msg_hdr);
+    while (header) |hdr| {
+        const fd_bytes: []align(@alignOf(std.posix.fd_t)) const u8 = @alignCast(cmsg.data(hdr));
+        const fds = std.mem.bytesAsSlice(std.posix.fd_t, fd_bytes);
+        try self.fd_in.putMany(fds);
+        header = cmsg.nextHeader(&msg_hdr, hdr);
+    }
+}
+
 const DeserializeMessageError = wire.DeserializeError || error{ UnsupportedInterface, InvalidOpcode };
 
 fn deserializeMessage(self: *Connection, comptime Message: type, header: wire.Header, interface: [:0]const u8, body: []const u8) DeserializeMessageError!?Message {

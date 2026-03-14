@@ -42,10 +42,13 @@
         "NOTSOCK",
         "NXTHDR",
         "OPNOTSUPP",
+        "pollfd",
         "posix",
         "prng",
         "recvmsg",
+        "revents",
         "sendmsg",
+        "TIMEDOUT",
         "wayland"
     ]
 }
