@@ -32,7 +32,7 @@ const Stack = struct {
     alloc: Allocator,
 
     pub fn init(alloc: Allocator) Stack {
-        return .{ .items = .{}, .alloc = alloc };
+        return .{ .items = .empty, .alloc = alloc };
     }
 
     pub fn deinit(self: *Stack) void {

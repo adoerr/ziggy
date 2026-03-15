@@ -14,10 +14,8 @@ pub const std_options = std.Options{
     .log_level = .info,
 };
 
-pub fn main() !void {
-    var alloc: std.heap.GeneralPurposeAllocator(.{}) = .init;
-    defer assert(alloc.deinit() == .ok);
-    const gpa = alloc.allocator();
+pub fn main(init: std.process.Init) !void {
+    const gpa = init.gpa;
 
     var threaded: Io.Threaded = .init(gpa, .{ .environ = .empty });
     defer threaded.deinit();
