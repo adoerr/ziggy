@@ -24,6 +24,8 @@ next_obj_id: u32 = wire.client_min_id,
 obj_id_free_list: std.ArrayList(u32) = .empty,
 min_obj_id: u32 = wire.client_min_id,
 max_obj_id: u32 = wire.client_max_id,
+// last received message header
+last_header: ?wire.Header = null,
 
 pub const InitError = std.Io.net.UnixAddress.ConnectError || error{OutOfMemory};
 
@@ -52,6 +54,13 @@ pub fn deinit(self: *Connection) void {
 
 pub const SendError = wire.SerializeError || FlushError || PutFdsError;
 
+/// Sends a Wayland message.
+///
+/// This function serializes the message arguments and appends them to the outgoing data buffer.
+/// It also handles any file descriptors associated with the message, appending them to the
+/// outgoing file descriptor buffer.
+///
+/// If there is not enough space in the buffers, this function attempts to flush the connection.
 pub fn sendMessage(self: *Connection, sender_id: u32, comptime len: usize, comptime opcode: u16, args: anytype, fds: []const std.posix.fd_t) SendError!void {
     var buf: [len]u8 = undefined;
     const bytes_written = try wire.serializeMessage(&buf, sender_id, opcode, args);
@@ -72,6 +81,45 @@ pub fn sendMessage(self: *Connection, sender_id: u32, comptime len: usize, compt
         },
         else => |e| return e,
     };
+}
+
+pub const NextMessageError = FlushError || ReadIncomingError || DeserializeMessageError || error{ MessageTooLong, InvalidId };
+
+/// Reads the next Wayland message from the connection.
+///
+/// This function first flushes any buffered outgoing data. Then it waits for an incoming message,
+/// reading data and file descriptors from the socket. Once a complete message is available, it
+/// identifies the target object and interface, and attempts to deserialize the message into the
+/// provided `Message` union type.
+///
+/// If the timeout is reached before a message is fully received, `error.Timeout` is returned.
+pub fn nextMessage(self: *Connection, comptime Message: type, timeout: std.Io.Timeout) NextMessageError!Message {
+    const deadline = timeout.toDeadline(self.io).toTimestamp(self.io);
+
+    try self.flush();
+
+    outer: while (true) {
+        const header = self.peekHeader() orelse {
+            try self.readIncoming(deadline);
+            continue :outer;
+        };
+
+        if (header.length > wire.max_msg_size) return error.MessageToLong;
+
+        const data = self.data_in.peek(header.length) orelse {
+            try self.readIncoming(deadline);
+            continue :outer;
+        };
+        const body = data[@sizeOf(wire.Header)..];
+        const interface = try self.map.getInterface(header.object);
+        const message = try self.deserializeMessage(Message, header, interface, body) orelse {
+            try self.readIncoming(deadline);
+            continue :outer;
+        };
+
+        self.last_header = header;
+        return message;
+    }
 }
 
 pub const FlushError = error{ ConnectionClosed, OutOfMemory, Unexpected };
@@ -168,6 +216,14 @@ fn peekHeader(self: *const Connection) ?wire.Header {
 
 const ReadIncomingError = std.posix.PollError || error{ ConnectionClosed, Timeout, OutOfMemory, OutOfSpace };
 
+/// Reads incoming data and file descriptors from the connection stream.
+///
+/// This function waits for data to become available on the socket, respecting the provided
+/// `deadline`. If data is available, it reads it into the `data_in` buffer and any
+/// associated file descriptors into the `fd_in` buffer.
+///
+/// If the deadline is reached before any data is received, `error.Timeout` is returned.
+/// If the connection is closed by the peer, `error.ConnectionClosed` is returned.
 fn readIncoming(self: *Connection, deadline: ?std.Io.Clock.Timestamp) ReadIncomingError!void {
     self.data_in.shiftToStart();
     self.fd_in.shiftToStart();
