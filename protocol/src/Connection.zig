@@ -19,9 +19,11 @@ data_out: Buffer(wire.max_msg_size, u8) = .{},
 // (file) descriptor transfer messages
 fd_in: Buffer(wire.max_msg_args, std.posix.fd_t),
 fd_out: Buffer(wire.max_msg_args, std.posix.fd_t),
-// object id management
+// next new object id
 next_obj_id: u32 = wire.client_min_id,
+// free list of available/reusable object ids
 obj_id_free_list: std.ArrayList(u32) = .empty,
+// client object id range
 min_obj_id: u32 = wire.client_min_id,
 max_obj_id: u32 = wire.client_max_id,
 // last received message header
@@ -139,6 +141,107 @@ pub fn createObject(self: *Connection, comptime T: type) CreateObjectError!T {
     // add object id to interface mapping
     try self.map.add(self.alloc, object_id, T.interface);
     return @enumFromInt(object_id);
+}
+
+test "Connection - createObject" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const TestObject = enum(u32) {
+        _,
+        pub const interface = "test_interface";
+    };
+
+    var conn = Connection{
+        .stream = undefined,
+        .io = undefined,
+        .alloc = alloc,
+        .map = undefined,
+        // obj_id_free_list uses default
+        .fd_in = .{}, // defaults
+        .fd_out = .{}, // defaults
+    };
+    conn.map = try ObjectInterfaceMap.init(alloc);
+    defer conn.map.deinit(alloc);
+    defer conn.obj_id_free_list.deinit(alloc);
+
+    // create first object mapping
+    const obj1 = try conn.createObject(TestObject);
+    try testing.expectEqual(@as(u32, wire.client_min_id), @intFromEnum(obj1));
+    const iface1 = try conn.map.getInterface(@intFromEnum(obj1));
+    try testing.expectEqualStrings("test_interface", iface1);
+
+    // create second object
+    const obj2 = try conn.createObject(TestObject);
+    try testing.expectEqual(@as(u32, wire.client_min_id + 1), @intFromEnum(obj2));
+
+    // reuse of object id
+    const obj3 = try conn.createObject(TestObject);
+    try testing.expectEqual(@as(u32, wire.client_min_id + 2), @intFromEnum(obj3));
+    try conn.releaseObject(@intFromEnum(obj3));
+    const obj4 = try conn.createObject(TestObject);
+    try testing.expectEqual(@as(u32, wire.client_min_id + 2), @intFromEnum(obj4));
+
+    // OutOfIds error
+    conn.next_obj_id = conn.max_obj_id + 1;
+    conn.obj_id_free_list.clearRetainingCapacity();
+    try testing.expectError(error.OutOfIds, conn.createObject(TestObject));
+}
+
+pub const ReleaseObjectError = error{ OutOfMemory, InvalidId };
+
+pub fn releaseObject(self: *Connection, object_id: u32) ReleaseObjectError!void {
+    // delete object id to interface mapping
+    try self.map.delete(object_id);
+    // make object id available again
+    try self.obj_id_free_list.append(self.alloc, object_id);
+}
+
+test "Connection - releaseObject" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const TestObject = enum(u32) {
+        _,
+        pub const interface = "test_interface";
+    };
+
+    var conn = Connection{
+        .stream = undefined,
+        .io = undefined,
+        .alloc = alloc,
+        .map = undefined,
+        .fd_in = .{}, // defaults
+        .fd_out = .{}, // defaults
+    };
+    conn.map = try ObjectInterfaceMap.init(alloc);
+    defer conn.map.deinit(alloc);
+    defer conn.obj_id_free_list.deinit(alloc);
+
+    // create 3 objects
+    const obj1 = try conn.createObject(TestObject);
+    const obj2 = try conn.createObject(TestObject);
+    const obj3 = try conn.createObject(TestObject);
+    // verify object ids
+    try testing.expectEqual(@as(u32, wire.client_min_id), @intFromEnum(obj1));
+    try testing.expectEqual(@as(u32, wire.client_min_id + 1), @intFromEnum(obj2));
+    try testing.expectEqual(@as(u32, wire.client_min_id + 2), @intFromEnum(obj3));
+
+    // release multiple objects (LIFO order for reuse)
+    try conn.releaseObject(@intFromEnum(obj2));
+    try conn.releaseObject(@intFromEnum(obj3));
+    // verify object id to interface map deletion
+    try testing.expectError(error.InvalidId, conn.map.getInterface(@intFromEnum(obj2)));
+    try testing.expectError(error.InvalidId, conn.map.getInterface(@intFromEnum(obj3)));
+
+    // recreate objects - should reuse IDs in LIFO (last released is obj3, then obj2)
+    const obj3_new = try conn.createObject(TestObject);
+    try testing.expectEqual(@as(u32, wire.client_min_id + 2), @intFromEnum(obj3_new));
+    const obj2_new = try conn.createObject(TestObject);
+    try testing.expectEqual(@as(u32, wire.client_min_id + 1), @intFromEnum(obj2_new));
+    // create another one - should be new ID because free list is empty
+    const obj4 = try conn.createObject(TestObject);
+    try testing.expectEqual(@as(u32, wire.client_min_id + 3), @intFromEnum(obj4));
 }
 
 pub const FlushError = error{ ConnectionClosed, OutOfMemory, Unexpected };
@@ -780,49 +883,4 @@ test "ObjectInterfaceMap - ensureCapacity" {
     // Trying to ensure invalid capacity (index > len) without contiguous growth logic? The ensureCapacity implementations logic checks,
     // `if (index > interfaces.len) return error.InvalidId;` It only allows growing by 1 step at the boundary `(index == len)`.
     try testing.expectError(error.InvalidId, map.ensureCapacity(alloc, 100, .client));
-}
-
-test "Connection - createObject" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    const TestObject = enum(u32) {
-        _,
-        pub const interface = "test_interface";
-    };
-
-    var conn = Connection{
-        .stream = undefined,
-        .io = undefined,
-        .alloc = alloc,
-        .map = undefined,
-        // obj_id_free_list uses default
-        .fd_in = .{}, // defaults
-        .fd_out = .{}, // defaults
-    };
-    conn.map = try ObjectInterfaceMap.init(alloc);
-    defer conn.map.deinit(alloc);
-    defer conn.obj_id_free_list.deinit(alloc);
-
-    // create first object mapping
-    const obj1 = try conn.createObject(TestObject);
-    try testing.expectEqual(@as(u32, wire.client_min_id), @intFromEnum(obj1));
-    const iface1 = try conn.map.getInterface(@intFromEnum(obj1));
-    try testing.expectEqualStrings("test_interface", iface1);
-
-    // create second object
-    const obj2 = try conn.createObject(TestObject);
-    try testing.expectEqual(@as(u32, wire.client_min_id + 1), @intFromEnum(obj2));
-
-    // reuse of object id
-    try conn.obj_id_free_list.append(alloc, wire.client_min_id);
-    try conn.map.delete(wire.client_min_id);
-    const obj3 = try conn.createObject(TestObject);
-    try testing.expectEqual(@as(u32, wire.client_min_id), @intFromEnum(obj3));
-
-    // OutOfIds error
-    conn.next_obj_id = conn.max_obj_id + 1;
-    conn.obj_id_free_list.clearRetainingCapacity();
-
-    try testing.expectError(error.OutOfIds, conn.createObject(TestObject));
 }
