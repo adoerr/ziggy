@@ -122,6 +122,25 @@ pub fn nextMessage(self: *Connection, comptime Message: type, timeout: std.Io.Ti
     }
 }
 
+pub const CreateObjectError = error{ OutOfMemory, OutOfIds, InvalidId, ObjectAlreadyExists };
+
+pub fn createObject(self: *Connection, comptime T: type) CreateObjectError!T {
+    // get next object id
+    const object_id = id: {
+        if (self.obj_id_free_list.pop()) |id| break :id id;
+        // check if we ran out of object ids
+        if (self.next_obj_id > self.max_obj_id) {
+            @branchHint(.unlikely);
+            return error.OutOfIds;
+        }
+        defer self.next_obj_id += 1;
+        break :id self.next_obj_id;
+    };
+    // add object id to interface mapping
+    try self.map.add(self.alloc, object_id, T.interface);
+    return @enumFromInt(object_id);
+}
+
 pub const FlushError = error{ ConnectionClosed, OutOfMemory, Unexpected };
 
 /// Flushes the connection's outgoing buffer to the underlying stream.
