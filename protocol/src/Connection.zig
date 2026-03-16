@@ -781,3 +781,48 @@ test "ObjectInterfaceMap - ensureCapacity" {
     // `if (index > interfaces.len) return error.InvalidId;` It only allows growing by 1 step at the boundary `(index == len)`.
     try testing.expectError(error.InvalidId, map.ensureCapacity(alloc, 100, .client));
 }
+
+test "Connection - createObject" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+
+    const TestObject = enum(u32) {
+        _,
+        pub const interface = "test_interface";
+    };
+
+    var conn = Connection{
+        .stream = undefined,
+        .io = undefined,
+        .alloc = alloc,
+        .map = undefined,
+        // obj_id_free_list uses default
+        .fd_in = .{}, // defaults
+        .fd_out = .{}, // defaults
+    };
+    conn.map = try ObjectInterfaceMap.init(alloc);
+    defer conn.map.deinit(alloc);
+    defer conn.obj_id_free_list.deinit(alloc);
+
+    // create first object mapping
+    const obj1 = try conn.createObject(TestObject);
+    try testing.expectEqual(@as(u32, wire.client_min_id), @intFromEnum(obj1));
+    const iface1 = try conn.map.getInterface(@intFromEnum(obj1));
+    try testing.expectEqualStrings("test_interface", iface1);
+
+    // create second object
+    const obj2 = try conn.createObject(TestObject);
+    try testing.expectEqual(@as(u32, wire.client_min_id + 1), @intFromEnum(obj2));
+
+    // reuse of object id
+    try conn.obj_id_free_list.append(alloc, wire.client_min_id);
+    try conn.map.delete(wire.client_min_id);
+    const obj3 = try conn.createObject(TestObject);
+    try testing.expectEqual(@as(u32, wire.client_min_id), @intFromEnum(obj3));
+
+    // OutOfIds error
+    conn.next_obj_id = conn.max_obj_id + 1;
+    conn.obj_id_free_list.clearRetainingCapacity();
+
+    try testing.expectError(error.OutOfIds, conn.createObject(TestObject));
+}

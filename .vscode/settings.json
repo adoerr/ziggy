@@ -16,6 +16,7 @@
         "FIRSTHDR",
         "ftruncate",
         "HOSTUNREACH",
+        "iface",
         "INVAL",
         "iovec",
         "iovlen",
