@@ -10,4 +10,8 @@ pub fn main(init: std.process.Init) !void {
     const addr = try wayland.Address.default(init);
     try stdout.print("Address: {f}\n", .{addr});
     try stdout.flush();
+
+    var conn = try wayland.Connection.init(init.io, init.gpa, addr);
+    defer conn.deinit();
+    std.debug.print("Connected to: {}\n", .{conn.stream.socket.address});
 }

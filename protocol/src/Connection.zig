@@ -17,8 +17,8 @@ map: ObjectInterfaceMap,
 data_in: Buffer(wire.max_msg_size, u8) = .{},
 data_out: Buffer(wire.max_msg_size, u8) = .{},
 // (file) descriptor transfer messages
-fd_in: Buffer(wire.max_msg_args, std.posix.fd_t),
-fd_out: Buffer(wire.max_msg_args, std.posix.fd_t),
+fd_in: Buffer(wire.max_msg_args, std.posix.fd_t) = .{},
+fd_out: Buffer(wire.max_msg_args, std.posix.fd_t) = .{},
 // next new object id
 next_obj_id: u32 = wire.client_min_id,
 // free list of available/reusable object ids
