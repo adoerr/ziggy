@@ -54,6 +54,28 @@ pub fn deinit(self: *Connection) void {
     self.* = undefined;
 }
 
+/// Initialize a Wayland connection from an already existing Unix stream
+pub fn fromSocket(io: std.Io, alloc: std.mem.Allocator, stream: std.Io.net.Stream, side: ProtocolSide) error{OutOfMemory}!Connection {
+    return Connection{
+        .io = io,
+        .alloc = alloc,
+        .map = try .init(alloc),
+        .stream = stream,
+        .next_obj_id = switch (side) {
+            .client => wire.client_min_id,
+            .server => wire.server_min_id,
+        },
+        .min_obj_id = switch (side) {
+            .client => wire.client_min_id,
+            .server => wire.server_min_id,
+        },
+        .max_obj_id = switch (side) {
+            .client => wire.client_max_id,
+            .server => wire.server_max_id,
+        },
+    };
+}
+
 pub const SendError = wire.SerializeError || FlushError || PutFdsError;
 
 /// Sends a Wayland message.
