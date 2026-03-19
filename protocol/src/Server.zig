@@ -73,6 +73,13 @@ pub fn getEndpoint(self: *const Server) []const u8 {
     return path[idx..];
 }
 
+pub const AcceptError = std.Io.net.Server.AcceptError || error{OutOfMemory};
+
+pub fn accept(self: *Server, io: std.Io, alloc: std.mem.Allocator) AcceptError!Connection {
+    const stream = try self.inner.accept(io);
+    return Connection.fromSocket(io, alloc, stream, .server);
+}
+
 const LockDisplayError = std.Io.File.OpenError || std.Io.File.LockError || std.Io.File.StatError || error{LockFailed};
 
 fn lockDisplay(io: std.Io, xdg_runtime_dir: std.Io.Dir, endpoint: []const u8) !std.Io.File {
