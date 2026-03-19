@@ -54,6 +54,7 @@
         "revents",
         "sendmsg",
         "TIMEDOUT",
+        "unmarshalling",
         "wayland"
     ]
 }

@@ -12,13 +12,6 @@ pub fn build(b: *std.Build) void {
     build_http_step.dependOn(&http_server.step);
     b.getInstallStep().dependOn(&http_server.step);
 
-    // build `ladder`
-    const ladder = b.addSystemCommand(&.{ "zig", "build" });
-    ladder.cwd = b.path("ladder");
-    const build_ladder_step = b.step("ladder", "Build the `ladder` program");
-    build_ladder_step.dependOn(&ladder.step);
-    b.getInstallStep().dependOn(&ladder.step);
-
     // build `ps`
     const ps = b.addSystemCommand(&.{ "zig", "build" });
     ps.cwd = b.path("ps");
@@ -39,4 +32,11 @@ pub fn build(b: *std.Build) void {
     const build_send_fd_step = b.step("send_fd", "Build the send file descriptor example");
     build_send_fd_step.dependOn(&send_fd.step);
     b.getInstallStep().dependOn(&send_fd.step);
+
+    // build `protocol`
+    const protocol = b.addSystemCommand(&.{ "zig", "build" });
+    protocol.cwd = b.path("protocol");
+    const build_protocol_step = b.step("protocol", "Build the Wayland wire protocol module");
+    build_protocol_step.dependOn(&protocol.step);
+    b.getInstallStep().dependOn(&protocol.step);
 }

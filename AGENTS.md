@@ -14,7 +14,6 @@ This workspace is a monorepo containing several independent Zig projects, primar
 ### Sub-projects
 - **`gui/`**: A Wayland client implementation. Uses `wayland-protocols` vendored in `zig-pkg`. Currently disabled in the root build.
 - **`http_server/`**: A simple HTTP server implementation with Python connection script.
-- **`ladder/`**: A word ladder game/solver.
 - **`protocol/`**: Core library for the Wayland wire protocol (marshalling/unmarshalling, connection handling).
 - **`ps/`**: A PostScript interpreter and lexer.
 - **`send_fd/`**: specific example demonstrating file descriptor passing over Unix domain sockets (essential for Wayland).
