@@ -47,6 +47,18 @@ pub fn init(env: std.process.Init, io: std.Io) InitError!Server {
     return self;
 }
 
+pub fn deinit(self: *Server, io: std.Io) void {
+    const path = std.mem.sliceTo(&self.path, 0);
+    var lock_buf: [std.Io.UnixAddress.max_len]u8 = undefined;
+    const lock_path = std.fmt.bufPrint(&lock_buf, "{s}.lock", .{path}) catch unreachable;
+
+    std.Io.Dir.deleteFileAbsolute(io, path) catch {};
+    std.Io.Dir.deleteFileAbsolute(io, lock_path) catch {};
+
+    self.lock.close(io);
+    self.inner.socket.close(io);
+}
+
 const LockDisplayError = std.Io.File.OpenError || std.Io.File.LockError || std.Io.File.StatError || error{LockFailed};
 
 fn lockDisplay(io: std.Io, xdg_runtime_dir: std.Io.Dir, endpoint: []const u8) !std.Io.File {
