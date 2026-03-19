@@ -59,6 +59,20 @@ pub fn deinit(self: *Server, io: std.Io) void {
     self.inner.socket.close(io);
 }
 
+pub fn getFd(self: *const Server) std.posix.fd_t {
+    return self.inner.socket.handle;
+}
+
+pub fn socketPath(self: *const Server) []const u8 {
+    return std.mem.sliceTo(&self.path, 0);
+}
+
+pub fn getEndpoint(self: *const Server) []const u8 {
+    const path = self.socketPath();
+    const idx = if (std.mem.findScalarLast(u8, path, '/')) |idx| idx + 1 else 0;
+    return path[idx..];
+}
+
 const LockDisplayError = std.Io.File.OpenError || std.Io.File.LockError || std.Io.File.StatError || error{LockFailed};
 
 fn lockDisplay(io: std.Io, xdg_runtime_dir: std.Io.Dir, endpoint: []const u8) !std.Io.File {
