@@ -49,7 +49,7 @@ pub fn init(env: std.process.Init, io: std.Io) InitError!Server {
 
 pub fn deinit(self: *Server, io: std.Io) void {
     const path = std.mem.sliceTo(&self.path, 0);
-    var lock_buf: [std.Io.UnixAddress.max_len]u8 = undefined;
+    var lock_buf: [std.Io.net.UnixAddress.max_len]u8 = undefined;
     const lock_path = std.fmt.bufPrint(&lock_buf, "{s}.lock", .{path}) catch unreachable;
 
     std.Io.Dir.deleteFileAbsolute(io, path) catch {};
@@ -90,15 +90,64 @@ fn lockDisplay(io: std.Io, xdg_runtime_dir: std.Io.Dir, endpoint: []const u8) !s
     // Create lock file
     const lock_file = try xdg_runtime_dir.createFile(io, lock, .{
         .read = true,
-        .permissions = .fromMode(std.posix.system.IRUSR, std.posix.system.IWUSR, std.posix.system.IRGRP, std.posix.system.IWGRP),
+        .permissions = .fromMode(std.posix.S.IRUSR | std.posix.S.IWUSR | std.posix.S.IRGRP | std.posix.S.IWGRP),
         .lock_nonblocking = true,
     });
     errdefer lock_file.close(io);
 
-    if (!lock_file.tryLock(io, .exclusive)) return error.LockFailed;
+    if (!(try lock_file.tryLock(io, .exclusive))) return error.LockFailed;
 
     // Remove stale socket if it exists
     xdg_runtime_dir.deleteFile(io, endpoint) catch {};
 
     return lock_file;
+}
+
+test "Server - init" {
+    const alloc = std.testing.allocator;
+
+    // Construct Threaded IO
+    var threaded = std.Io.Threaded.init(alloc, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+
+    // Create temp directory for XDG_RUNTIME_DIR
+    const tmp_name = "zig-test-server-tmp";
+
+    // Clean up potentially stale dir first
+    std.Io.Dir.cwd().deleteTree(io, tmp_name) catch {};
+
+    // Create new temp dir
+    try std.Io.Dir.cwd().createDirPath(io, tmp_name);
+
+    var tmp_dir = try std.Io.Dir.cwd().openDir(io, tmp_name, .{});
+    defer {
+        tmp_dir.close(io);
+        std.Io.Dir.cwd().deleteTree(io, tmp_name) catch {};
+    }
+
+    var path_buf: [4096]u8 = undefined;
+    const len = try std.Io.Dir.cwd().realPathFile(io, tmp_name, &path_buf);
+    const abs_path = path_buf[0..len];
+
+    // Mock environment
+    var env_map = std.process.Environ.Map.init(alloc);
+    defer env_map.deinit();
+    try env_map.put("XDG_RUNTIME_DIR", abs_path);
+
+    // Construct std.process.Init
+    const init_ctx = std.process.Init{
+        .environ_map = &env_map,
+        .io = io,
+        .minimal = undefined,
+        .arena = undefined,
+        .gpa = undefined,
+        .preopens = undefined,
+    };
+
+    // Initialize Server
+    var server = try Server.init(init_ctx, io);
+    defer server.deinit(io);
+
+    try std.testing.expect(server.getEndpoint().len > 0);
 }

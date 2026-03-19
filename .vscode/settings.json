@@ -49,6 +49,7 @@
         "OPNOTSUPP",
         "pollfd",
         "posix",
+        "preopens",
         "prng",
         "recvmsg",
         "revents",
