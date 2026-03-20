@@ -18,8 +18,8 @@ path: [std.Io.net.UnixAddress.max_len:0]u8,
 pub const InitError = LockDisplayError || std.Io.Dir.OpenError || std.Io.net.UnixAddress.ListenError ||
     error{ NoXdgRuntimeDir, NoDisplaysAvailable, NameTooLong, NoSpaceLeft };
 
-pub fn init(env: std.process.Init, io: std.Io) InitError!Server {
-    const xdg_runtime_dir_path = env.environ_map.get("XDG_RUNTIME_DIR") orelse return error.NoXdgRuntimeDir;
+pub fn init(io: std.Io, env: *std.process.Environ.Map) InitError!Server {
+    const xdg_runtime_dir_path = env.get("XDG_RUNTIME_DIR") orelse return error.NoXdgRuntimeDir;
     const xdg_runtime_dir = try std.Io.Dir.openDirAbsolute(io, xdg_runtime_dir_path, .{});
     defer xdg_runtime_dir.close(io);
 
@@ -57,6 +57,7 @@ pub fn deinit(self: *Server, io: std.Io) void {
 
     self.lock.close(io);
     self.inner.socket.close(io);
+    self.* = undefined;
 }
 
 pub fn getFd(self: *const Server) std.posix.fd_t {
@@ -135,18 +136,8 @@ test "Server - init" {
     defer env_map.deinit();
     try env_map.put("XDG_RUNTIME_DIR", abs_path);
 
-    // Construct std.process.Init
-    const init_ctx = std.process.Init{
-        .environ_map = &env_map,
-        .io = io,
-        .minimal = undefined,
-        .arena = undefined,
-        .gpa = undefined,
-        .preopens = undefined,
-    };
-
     // Initialize Server
-    var server = try Server.init(init_ctx, io);
+    var server = try Server.init(io, &env_map);
     defer server.deinit(io);
 
     try std.testing.expect(server.getEndpoint().len > 0);
