@@ -1,0 +1,18 @@
+.{
+    .name = .scanner,
+    .version = "0.0.0",
+    .fingerprint = 0x55efdf29ca2b38f7, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.16.0-dev.2915+065c6e794",
+    .dependencies = .{ .xml = .{
+        .url = "git+https://github.com/adoerr/zig-xml?ref=array-list-fix#6dd76cd436ee6ee9efc8d6ee464c24f7becd3330",
+        .hash = "xml-0.2.0-ZTbP3xk6AgAtQojsn6wBC2sgaBS6_p_mJGfkBkvKuSkw",
+    }, .wayland = .{ .path = "../protocol" } },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        // For example...
+        //"LICENSE",
+        //"README.md",
+    },
+}

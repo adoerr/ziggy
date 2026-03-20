@@ -39,4 +39,11 @@ pub fn build(b: *std.Build) void {
     const build_protocol_step = b.step("protocol", "Build the Wayland wire protocol module");
     build_protocol_step.dependOn(&protocol.step);
     b.getInstallStep().dependOn(&protocol.step);
+
+    // build 'scanner'
+    const scanner = b.addSystemCommand(&.{ "zig", "build" });
+    scanner.cwd = b.path("scanner");
+    const build_scanner_step = b.step("scanner", "Build the Wayland XML scanner");
+    build_scanner_step.dependOn(&scanner.step);
+    b.getInstallStep().dependOn(&scanner.step);
 }
