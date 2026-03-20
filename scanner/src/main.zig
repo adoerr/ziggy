@@ -7,5 +7,6 @@ pub fn main(_: std.process.Init) !void {
 }
 
 test {
-    @import("std").testing.refAllDecls(@This());
+    std.testing.refAllDecls(@This());
+    std.testing.refAllDecls(util);
 }
