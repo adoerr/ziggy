@@ -33,8 +33,8 @@
     // internet connectivity.
     .dependencies = .{
         .wayland = .{
-            .url = "git+https://github.com/adoerr/zig-wayland#e72b0b44ca3af5a4dfd418c082fa9161b7163372",
-            .hash = "wayland-1.1.0-2g_1TIVlAgALLVk4GrmgLLY56sQN0c73GRLD5mofBd_h",
+            .url = "git+https://github.com/adoerr/zig-wayland#d07ffeac887c16b98816344a6d5282e7e875fcd0",
+            .hash = "wayland-1.1.0-2g_1TJZlAgAB_MP03fOMjma_AUGMBqXhxU5ULgQ3oCQ9",
         },
     },
     .paths = .{
