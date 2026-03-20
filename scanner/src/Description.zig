@@ -30,6 +30,17 @@ pub fn parse(alloc: std.mem.Allocator, reader: *xml.Reader) !Description {
     return .{ .summary = summary, .body = maybe_body };
 }
 
+pub fn deinit(self: Description, alloc: std.mem.Allocator) void {
+    alloc.free(self.summary);
+    if (self.body) |body| alloc.free(body);
+}
+
+pub fn printSummary(summary: []const u8, prefix: []const u8, writer: *std.Io.Writer) !void {
+    const trimmed = std.mem.trim(u8, summary, " \n\t");
+    const needs_period = trimmed[trimmed.len - 1] != '.';
+    try writer.print("{s}{c}{s}{s}\n", .{ prefix, std.ascii.toLower(trimmed[0]), trimmed[1..], if (needs_period) "." else "" });
+}
+
 test "Description - parse simple description" {
     const src =
         \\<description summary="foo">
