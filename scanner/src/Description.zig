@@ -9,25 +9,21 @@ summary: []const u8,
 body: ?[]const u8,
 
 pub fn parse(alloc: std.mem.Allocator, reader: *xml.Reader) !Description {
-    const summary = for (0..reader.attributeCount()) |i| {
-        const attr = reader.attributeName(i);
-        if (!std.mem.eql(u8, attr, "summary")) continue;
-        break try reader.attributeValueAlloc(alloc, i);
-    } else return error.SummaryNotFound;
+    const summary_idx = reader.attributeIndex("summary") orelse return error.SummaryNotFound;
+    const summary = try reader.attributeValueAlloc(alloc, summary_idx);
     errdefer alloc.free(summary);
 
     var body = try std.ArrayList(u8).initCapacity(alloc, 1024);
     defer body.deinit(alloc);
 
     while (reader.read()) |node| switch (node) {
-        .eof => return error.UnexpectedEof,
         .element_end => {
-            const name = reader.elementName();
-            if (!std.mem.eql(u8, name, "description")) return error.UnexpectedElementEnd;
+            if (!std.mem.eql(u8, reader.elementName(), "description")) return error.UnexpectedElementEnd;
             break;
         },
         .text => try body.appendSlice(alloc, reader.textRaw()),
-        else => continue,
+        .eof => return error.UnexpectedEof,
+        else => {},
     } else |err| return err;
 
     const maybe_body = if (body.items.len > 0) try body.toOwnedSlice(alloc) else null;
