@@ -17,16 +17,16 @@ info: union(enum) {
 
 pub const Error = error{ NoXdgRuntimeDir, PathTooLong };
 
-pub fn default(init: std.process.Init) Error!Address {
-    if (init.environ_map.get("WAYLAND_SOCKET")) |sock_str| {
+pub fn default(env: *std.process.Environ.Map) Error!Address {
+    if (env.get("WAYLAND_SOCKET")) |sock_str| {
         if (std.fmt.parseInt(std.posix.fd_t, sock_str, 10) catch null) |sock| {
             return .initSocketFd(sock);
         }
     }
 
-    const display = init.environ_map.get("WAYLAND_DISPLAY") orelse "wayland-0";
+    const display = env.get("WAYLAND_DISPLAY") orelse "wayland-0";
 
-    return .initEndpoint(init, display);
+    return .initEndpoint(env, display);
 }
 
 pub fn initSocketFd(sock: std.posix.fd_t) Address {
@@ -36,8 +36,8 @@ pub fn initSocketFd(sock: std.posix.fd_t) Address {
     };
 }
 
-pub fn initEndpoint(init: std.process.Init, endpoint: []const u8) Error!Address {
-    const xdg_runtime_dir = init.environ_map.get("XDG_RUNTIME_DIR") orelse
+pub fn initEndpoint(env: *std.process.Environ.Map, endpoint: []const u8) Error!Address {
+    const xdg_runtime_dir = env.get("XDG_RUNTIME_DIR") orelse
         return error.NoXdgRuntimeDir;
 
     var self = Address{
