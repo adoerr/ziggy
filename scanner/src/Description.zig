@@ -37,14 +37,16 @@ pub fn deinit(self: Description, alloc: std.mem.Allocator) void {
 
 pub fn write(self: *const Description, writer: anytype, prefix: []const u8) !void {
     if (self.body) |body| {
-        var it = std.mem.splitScalar(u8, body, '\n');
-        while (it.peek()) |peek| {
-            if (peek.len == 0) _ = it.next() else break;
-        }
+        // Find the start/end of the relevant text.
+        const trimmed_body = std.mem.trim(u8, body, " \n\t");
+        if (trimmed_body.len == 0) return;
+
+        var it = std.mem.splitScalar(u8, trimmed_body, '\n');
         while (it.next()) |raw_line| {
+            // Each line is trimmed individually to remove indentation.
             const line = std.mem.trim(u8, raw_line, " \t");
             if (line.len == 0) {
-                if (it.peek() != null) try writer.print("{s}\n", .{prefix});
+                try writer.print("{s}\n", .{prefix});
             } else try writer.print("{s}{s}\n", .{ prefix, line });
         }
     } else try printSummary(self.summary, prefix, writer);
