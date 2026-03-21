@@ -35,7 +35,7 @@ pub fn deinit(self: Description, alloc: std.mem.Allocator) void {
     if (self.body) |body| alloc.free(body);
 }
 
-pub fn write(self: *const Description, writer: *std.Io.Writer, prefix: []const u8) !void {
+pub fn write(self: *const Description, writer: anytype, prefix: []const u8) !void {
     if (self.body) |body| {
         var it = std.mem.splitScalar(u8, body, '\n');
         while (it.peek()) |peek| {
@@ -50,7 +50,7 @@ pub fn write(self: *const Description, writer: *std.Io.Writer, prefix: []const u
     } else try printSummary(self.summary, prefix, writer);
 }
 
-pub fn printSummary(summary: []const u8, prefix: []const u8, writer: *std.Io.Writer) !void {
+pub fn printSummary(summary: []const u8, prefix: []const u8, writer: anytype) !void {
     const trimmed = std.mem.trim(u8, summary, " \n\t");
     const needs_period = trimmed[trimmed.len - 1] != '.';
     try writer.print("{s}{c}{s}{s}\n", .{ prefix, std.ascii.toLower(trimmed[0]), trimmed[1..], if (needs_period) "." else "" });
@@ -150,4 +150,61 @@ test "Description - parse real wayland description" {
     // Verify part of the body
     const body = desc.body.?;
     try std.testing.expect(std.mem.indexOf(u8, body, "The core global object.") != null);
+}
+
+test "Description - write full description with indentation" {
+    const src =
+        \\<description summary="core global object">
+        \\      The core global object.  This is a special singleton object.  It
+        \\      is used for internal Wayland protocol features.
+        \\    </description>
+    ;
+
+    var static_reader = xml.Reader.Static.init(std.testing.allocator, src, .{});
+    defer static_reader.deinit();
+    var reader = &static_reader.interface;
+
+    while (reader.read()) |node| {
+        if (node == .element_start) break;
+    } else |err| return err;
+
+    const desc = try Description.parse(std.testing.allocator, reader);
+    defer desc.deinit(std.testing.allocator);
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+
+    try desc.write(&out.writer, "  ");
+
+    const expected =
+        \\  The core global object.  This is a special singleton object.  It
+        \\  is used for internal Wayland protocol features.
+        \\
+    ;
+    try std.testing.expectEqualStrings(expected, out.written());
+}
+
+test "Description - write summary only" {
+    const src =
+        \\<description summary="the compositor singleton"/>
+    ;
+
+    var static_reader = xml.Reader.Static.init(std.testing.allocator, src, .{});
+    defer static_reader.deinit();
+    var reader = &static_reader.interface;
+
+    while (reader.read()) |node| {
+        if (node == .element_start) break;
+    } else |err| return err;
+
+    const desc = try Description.parse(std.testing.allocator, reader);
+    defer desc.deinit(std.testing.allocator);
+
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+
+    try desc.write(&out.writer, "  ");
+
+    const expected = "  the compositor singleton.\n";
+    try std.testing.expectEqualStrings(expected, out.written());
 }

@@ -29,7 +29,8 @@ The root `build.zig` is configured to build most projects at once.
 ```bash
 zig build
 ```
-*Note: The `gui` project is currently commented out in the root build configuration.*
+Do *not* use the root build script. In order to build a project, change directory into the project directory and use the 
+`build.zig` files there.
 
 ### Individual Projects
 To build or run specific projects, navigate to their directory or use the `-p` flag if supported, but standard practice is:
