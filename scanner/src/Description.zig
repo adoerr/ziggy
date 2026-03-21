@@ -35,6 +35,21 @@ pub fn deinit(self: Description, alloc: std.mem.Allocator) void {
     if (self.body) |body| alloc.free(body);
 }
 
+pub fn write(self: *const Description, writer: *std.Io.Writer, prefix: []const u8) !void {
+    if (self.body) |body| {
+        var it = std.mem.splitScalar(u8, body, '\n');
+        while (it.peek()) |peek| {
+            if (peek.len == 0) _ = it.next() else break;
+        }
+        while (it.next()) |raw_line| {
+            const line = std.mem.trim(u8, raw_line, " \t");
+            if (line.len == 0) {
+                if (it.peek() != null) try writer.print("{s}\n", .{prefix});
+            } else try writer.print("{s}{s}\n", .{ prefix, line });
+        }
+    } else try printSummary(self.summary, prefix, writer);
+}
+
 pub fn printSummary(summary: []const u8, prefix: []const u8, writer: *std.Io.Writer) !void {
     const trimmed = std.mem.trim(u8, summary, " \n\t");
     const needs_period = trimmed[trimmed.len - 1] != '.';
