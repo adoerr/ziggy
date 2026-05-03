@@ -19,13 +19,6 @@ pub fn build(b: *std.Build) void {
     build_ps_step.dependOn(&ps.step);
     b.getInstallStep().dependOn(&ps.step);
 
-    // build `gui`
-    const gui = b.addSystemCommand(&.{ "zig", "build" });
-    gui.cwd = b.path("gui");
-    const build_gui_step = b.step("gui", "Build the GUI");
-    build_gui_step.dependOn(&gui.step);
-    b.getInstallStep().dependOn(&gui.step);
-
     // build `send_fd`
     const send_fd = b.addSystemCommand(&.{ "zig", "build" });
     send_fd.cwd = b.path("send_fd");

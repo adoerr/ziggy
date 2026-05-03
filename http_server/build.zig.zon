@@ -4,7 +4,7 @@
     // In a future version of Zig it will be used for package deduplication.
     .version = "0.0.0",
     .fingerprint = 0x411f0d318bc29b80, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.16.0
+    .minimum_zig_version = "0.16.0",
     .dependencies = .{},
     .paths = .{
         "build.zig",
